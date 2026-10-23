@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000;
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
-const MAX = { tictactoe: 2, quiz: 2, draw: 8, shooter: 8, pictionary: 5 };
+const MAX = { tictactoe: 2, quiz: 2, draw: 8, shooter: 8, pictionary: 5, chat: 30 };
 const MIN = { pictionary: 4 };
 const EMOTES = ["👍", "😂", "😮", "🔥", "😢", "👏", "😎", "🤯"];
 const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
@@ -26,7 +26,7 @@ const BANK = [
 
 const shuffle = (a) => [...a].sort(() => Math.random() - 0.5);
 const rooms = new Map();
-const queues = { tictactoe: [], quiz: [], draw: [], shooter: [], pictionary: [] };
+const queues = { tictactoe: [], quiz: [], draw: [], shooter: [], pictionary: [], chat: [] };
 const newCode = () => {
   let c;
   do c = Array.from({ length: 4 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ"[Math.floor(Math.random() * 24)]).join("");
@@ -38,7 +38,11 @@ app.prepare().then(() => {
   const httpServer = createServer((req, res) => handle(req, res));
   const io = new Server(httpServer);
 
-  const sys = (r, text) => io.to(r.code).emit("chat", { sys: true, text });
+  const emitChat = (r, m) => {
+    io.to(r.code).emit("chat", m);
+    if (r.game === "chat") { (r.log ||= []).push(m); if (r.log.length > 50) r.log.shift(); }
+  };
+  const sys = (r, text) => emitChat(r, { sys: true, text });
 
   function publicState(r) {
     const s = r.state;
@@ -251,11 +255,14 @@ app.prepare().then(() => {
 
   function join(socket, r, name) {
     if (r.players.length >= MAX[r.game]) return socket.emit("err", "That room is full.");
+    // usernames are unique per room: "Sam" becomes "Sam2" if taken
+    const base = name;
+    for (let i = 2; r.players.some((p) => p.name === name); i++) name = `${base}${i}`;
     socket.join(r.code);
     socket.data = { code: r.code, name };
     r.players.push({ id: socket.id, name });
     sys(r, `${name} joined`);
-    if (r.game === "draw" || r.game === "shooter") {
+    if (r.game === "draw" || r.game === "shooter" || r.game === "chat") {
       r.status = "playing";
       if (r.game === "shooter") addShooter(r, socket.id, name);
       push(r);
@@ -282,7 +289,7 @@ app.prepare().then(() => {
     if (r.state && r.state.timer) clearTimeout(r.state.timer);
     if (!r.players.length) { if (r.sim) clearInterval(r.sim.timer); return void rooms.delete(r.code); }
     if (r.game === "pictionary") picLeave(r, socket.id);
-    else if (r.game !== "draw" && r.game !== "shooter") { r.status = "waiting"; r.state = null; }
+    else if (!["draw", "shooter", "chat"].includes(r.game)) { r.status = "waiting"; r.state = null; }
     sys(r, `${d.name} left`);
     push(r);
   }
@@ -296,6 +303,13 @@ app.prepare().then(() => {
     socket.on("find", ({ game, name } = {}) => {
       if (!MAX[game]) return;
       leave(socket);
+      if (game === "chat") {
+        // public lobby: join any open public chat room, or open a new one
+        const open = [...rooms.values()].find((x) => x.game === "chat" && x.public && x.players.length < MAX.chat);
+        const r = open || newRoom("chat");
+        r.public = true;
+        return join(socket, r, cleanName(name));
+      }
       const need = MIN[game] || 2;
       const q = (queues[game] = queues[game].filter((w) => io.sockets.sockets.has(w.id)));
       if (q.length + 1 >= need) {
@@ -331,7 +345,11 @@ app.prepare().then(() => {
       if (!r || typeof text !== "string" || now - (socket.data.last || 0) < 300) return;
       socket.data.last = now;
       if (r.game === "pictionary" && picChat(r, socket, text)) return;
-      io.to(r.code).emit("chat", { id: socket.id, from: socket.data.name, text: text.slice(0, 200) });
+      emitChat(r, { id: socket.id, from: socket.data.name, text: text.slice(0, 200), t: now });
+    });
+    socket.on("chat:sync", () => {
+      const r = mine(socket);
+      if (r && r.log) socket.emit("chat:history", r.log);
     });
     socket.on("emote", (emoji) => {
       const r = mine(socket);

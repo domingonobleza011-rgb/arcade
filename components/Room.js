@@ -4,7 +4,7 @@ import { getSocket } from "../lib/socket";
 import { TicTacToe, Quiz, Draw, Shooter, Pictionary } from "./games";
 
 const EMOTES = ["👍", "😂", "😮", "🔥", "😢", "👏", "😎", "🤯"];
-const TITLES = { tictactoe: "Tic-tac-toe", quiz: "Quiz battle", draw: "Drawing board", shooter: "Arena shooter", pictionary: "Draw & guess" };
+const TITLES = { tictactoe: "Tic-tac-toe", quiz: "Quiz battle", draw: "Drawing board", shooter: "Arena shooter", pictionary: "Draw & guess", chat: "Chat room" };
 
 export default function Room({ room, me, onLeave }) {
   const s = getSocket();
@@ -21,9 +21,12 @@ export default function Room({ room, me, onLeave }) {
       setFloats((f) => [...f, { ...e, id, left: 8 + Math.random() * 80 }]);
       setTimeout(() => setFloats((f) => f.filter((y) => y.id !== id)), 2200);
     };
+    const onHistory = (h) => setMsgs(h);
     s.on("chat", onChat);
+    s.on("chat:history", onHistory);
     s.on("emote", onEmote);
-    return () => { s.off("chat", onChat); s.off("emote", onEmote); };
+    s.emit("chat:sync");
+    return () => { s.off("chat", onChat); s.off("chat:history", onHistory); s.off("emote", onEmote); };
   }, [s]);
 
   useEffect(() => { end.current?.scrollIntoView({ block: "nearest" }); }, [msgs]);
@@ -37,6 +40,7 @@ export default function Room({ room, me, onLeave }) {
   };
 
   const Game = { tictactoe: TicTacToe, quiz: Quiz, draw: Draw, shooter: Shooter, pictionary: Pictionary }[room.game];
+  const isChat = room.game === "chat";
 
   return (
     <>
@@ -58,21 +62,21 @@ export default function Room({ room, me, onLeave }) {
         </div>
       </div>
 
-      <div className="room">
-        <section className="panel stage">
+      <div className="room" style={isChat ? { gridTemplateColumns: "1fr" } : undefined}>
+        {!isChat && <section className="panel stage">
           {room.status === "waiting" ? (
             <p className="status">Waiting for players ({room.players.length}/{room.min}). Share code <span className="code">{room.code}</span></p>
           ) : (
             <Game room={room} me={me} />
           )}
-        </section>
+        </section>}
 
-        <aside className="panel side">
+        <aside className={`panel side ${isChat ? "wide" : ""}`}>
           <div className="msgs" aria-live="polite">
             {msgs.map((m, i) => m.sys ? (
               <div key={i} className="msg sys">{m.text}</div>
             ) : (
-              <div key={i} className={`msg ${m.id === me ? "me" : ""}`}><b>{m.from}:</b> {m.text}</div>
+              <div key={i} className={`msg ${m.id === me ? "me" : ""}`}><b>{m.from}:</b> {m.text}{m.t && <span className="time">{new Date(m.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}</div>
             ))}
             <div ref={end} />
           </div>

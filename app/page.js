@@ -9,6 +9,7 @@ const GAMES = [
   { id: "draw", name: "Drawing board", blurb: "Sketch together in real time. Up to 8 players." },
   { id: "shooter", name: "Arena shooter", blurb: "Top-down free-for-all. First to 10 frags wins. Up to 8 players. Desktop only." },
   { id: "pictionary", name: "Draw & guess", blurb: "One player draws a secret word, everyone else guesses in chat. 4 to 5 players." },
+  { id: "chat", name: "Chat room", blurb: "Hang out in the public lobby, or make a private room with a code. Up to 30 people." },
 ];
 
 export default function Home() {
@@ -21,6 +22,10 @@ export default function Home() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    try { setName(localStorage.getItem("arcade-name") || ""); } catch {}
+  }, []);
+
+  useEffect(() => {
     const s = getSocket();
     const onRoom = (r) => { setMe(s.id); setRoom(r); setSearching(false); setError(""); };
     const onErr = (m) => { setError(m); setSearching(false); };
@@ -31,7 +36,11 @@ export default function Home() {
     return () => { s.off("room", onRoom); s.off("err", onErr); s.off("searching", onSearching); };
   }, []);
 
-  const emit = (ev, data) => { setError(""); getSocket().emit(ev, data); };
+  const emit = (ev, data) => {
+    setError("");
+    try { localStorage.setItem("arcade-name", name); } catch {}
+    getSocket().emit(ev, data);
+  };
   const leave = () => { getSocket().emit("leave"); setRoom(null); setSearching(false); };
 
   if (room) return <main className="wrap"><Room room={room} me={me} onLeave={leave} /></main>;
@@ -54,7 +63,7 @@ export default function Home() {
         </div>
         <div className="row">
           <button className="primary" disabled={searching} onClick={() => emit("find", { game, name })}>
-            {searching ? "Searching for an opponent…" : "Find opponent"}
+            {searching ? "Searching for an opponent…" : game === "chat" ? "Join public lobby" : "Find opponent"}
           </button>
           {searching && <button onClick={leave}>Cancel</button>}
           <button onClick={() => emit("create", { game, name })}>Create room</button>
