@@ -7,7 +7,8 @@ const port = process.env.PORT || 3000;
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
-const MAX = { tictactoe: 2, quiz: 2, draw: 8, shooter: 8 };
+const MAX = { tictactoe: 2, quiz: 2, draw: 8, shooter: 8, pictionary: 5 };
+const MIN = { pictionary: 4 };
 const EMOTES = ["👍", "😂", "😮", "🔥", "😢", "👏", "😎", "🤯"];
 const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 const BANK = [
@@ -25,7 +26,7 @@ const BANK = [
 
 const shuffle = (a) => [...a].sort(() => Math.random() - 0.5);
 const rooms = new Map();
-const queues = { tictactoe: [], quiz: [], draw: [], shooter: [] };
+const queues = { tictactoe: [], quiz: [], draw: [], shooter: [], pictionary: [] };
 const newCode = () => {
   let c;
   do c = Array.from({ length: 4 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ"[Math.floor(Math.random() * 24)]).join("");
@@ -53,10 +54,13 @@ app.prepare().then(() => {
     }
     return null;
   }
-  const push = (r) =>
-    io.to(r.code).emit("room", {
-      code: r.code, game: r.game, status: r.status, max: MAX[r.game], players: r.players, state: publicState(r),
-    });
+  const view = (r, state) => ({
+    code: r.code, game: r.game, status: r.status, max: MAX[r.game], min: MIN[r.game] || 2, players: r.players, state,
+  });
+  const push = (r) => {
+    if (r.game === "pictionary") return r.players.forEach((p) => io.to(p.id).emit("room", view(r, picState(r, p.id))));
+    io.to(r.code).emit("room", view(r, publicState(r)));
+  };
 
   function nextQ(r) {
     const s = r.state;
@@ -161,6 +165,84 @@ app.prepare().then(() => {
     });
   }
 
+  // ---- Draw & guess (4-5 players): one draws, everyone else guesses in chat ----
+  const WORDS = ["cat","house","tree","sun","car","pizza","guitar","rocket","bridge","banana","umbrella","castle","bicycle","robot","dragon","snowman","volcano","rainbow","spider","airplane","camera","pirate","cactus","lighthouse","penguin","tornado","helmet","ladder","mushroom","window","elephant","scissors","sandwich","whale","mountain","balloon","crown","key","clock","fish"];
+  const canDraw = (r, id) =>
+    r.game === "draw" ||
+    (r.game === "pictionary" && r.state && r.state.phase === "draw" && r.state.order[r.state.turn] === id);
+
+  function picState(r, viewer) {
+    const s = r.state;
+    if (!s) return null;
+    const drawer = s.order[s.turn];
+    const show = s.phase !== "draw" || viewer === drawer || s.guessed.includes(viewer);
+    return {
+      phase: s.phase, turn: s.turn, total: s.order.length, drawer, scores: s.scores, guessed: s.guessed,
+      word: s.word && show ? s.word : null, len: s.word ? s.word.length : 0,
+      secs: Math.max(0, Math.ceil(((s.endsAt || 0) - Date.now()) / 1000)),
+    };
+  }
+  function startPic(r) {
+    if (r.state && r.state.timer) clearTimeout(r.state.timer);
+    r.status = "playing";
+    r.state = {
+      turn: -1, order: shuffle(r.players.map((p) => p.id)), phase: "idle", word: null, guessed: [], timer: null,
+      scores: Object.fromEntries(r.players.map((p) => [p.id, 0])),
+    };
+    nextTurn(r);
+  }
+  function nextTurn(r) {
+    const s = r.state;
+    clearTimeout(s.timer);
+    do s.turn++; while (s.turn < s.order.length && !r.players.some((p) => p.id === s.order[s.turn]));
+    if (s.turn >= s.order.length) { s.phase = "done"; return push(r); }
+    s.phase = "draw"; s.guessed = [];
+    s.word = WORDS[Math.floor(Math.random() * WORDS.length)];
+    s.endsAt = Date.now() + 60000;
+    r.history = [];
+    io.to(r.code).emit("draw:clear");
+    s.timer = setTimeout(() => endTurn(r), 60000);
+    push(r);
+  }
+  function endTurn(r) {
+    const s = r.state;
+    if (!s || s.phase !== "draw") return;
+    clearTimeout(s.timer);
+    s.phase = "reveal";
+    push(r);
+    s.timer = setTimeout(() => nextTurn(r), 4000);
+  }
+  function picLeave(r, id) {
+    const s = r.state;
+    if (!s) return;
+    delete s.scores[id];
+    if (r.players.length < 2) { r.status = "waiting"; r.state = null; return; }
+    if (s.phase === "draw") {
+      const drawer = s.order[s.turn];
+      if (drawer === id) return nextTurn(r);
+      if (r.players.filter((p) => p.id !== drawer).every((p) => s.guessed.includes(p.id))) return endTurn(r);
+      s.timer = setTimeout(() => endTurn(r), Math.max(500, s.endsAt - Date.now()));
+    } else if (s.phase === "reveal") {
+      s.timer = setTimeout(() => nextTurn(r), 3000);
+    }
+  }
+  // returns true when the chat line was consumed (a correct guess, or a spoiler)
+  function picChat(r, socket, text) {
+    const s = r.state;
+    if (!s || s.phase !== "draw") return false;
+    const t = text.trim().toLowerCase().replace(/[^a-z ]/g, "");
+    const drawer = s.order[s.turn];
+    if (socket.id === drawer || s.guessed.includes(socket.id)) return t.includes(s.word);
+    if (t !== s.word) return false;
+    const left = Math.max(0, Math.ceil((s.endsAt - Date.now()) / 1000));
+    s.scores[socket.id] = (s.scores[socket.id] || 0) + Math.max(2, Math.ceil(left / 6));
+    if (s.scores[drawer] !== undefined) s.scores[drawer] += 3;
+    s.guessed.push(socket.id);
+    sys(r, `${socket.data.name} guessed the word!`);
+    if (s.guessed.length >= r.players.length - 1) endTurn(r); else push(r);
+    return true;
+  }
+
   function newRoom(game) {
     const r = { code: newCode(), game, players: [], status: "waiting", state: null, history: [] };
     rooms.set(r.code, r);
@@ -178,6 +260,11 @@ app.prepare().then(() => {
       if (r.game === "shooter") addShooter(r, socket.id, name);
       push(r);
     }
+    else if (r.game === "pictionary") {
+      if (r.state) { r.state.scores[socket.id] = 0; push(r); }
+      else if (r.players.length >= MIN.pictionary) startPic(r);
+      else push(r);
+    }
     else if (r.players.length === 2) start(r);
     else push(r);
   }
@@ -194,7 +281,8 @@ app.prepare().then(() => {
     if (r.sim) delete r.sim.players[socket.id];
     if (r.state && r.state.timer) clearTimeout(r.state.timer);
     if (!r.players.length) { if (r.sim) clearInterval(r.sim.timer); return void rooms.delete(r.code); }
-    if (r.game !== "draw" && r.game !== "shooter") { r.status = "waiting"; r.state = null; }
+    if (r.game === "pictionary") picLeave(r, socket.id);
+    else if (r.game !== "draw" && r.game !== "shooter") { r.status = "waiting"; r.state = null; }
     sys(r, `${d.name} left`);
     push(r);
   }
@@ -208,13 +296,11 @@ app.prepare().then(() => {
     socket.on("find", ({ game, name } = {}) => {
       if (!MAX[game]) return;
       leave(socket);
-      const q = queues[game];
-      while (q.length) {
-        const w = q.shift();
-        const ws = io.sockets.sockets.get(w.id);
-        if (!ws) continue;
+      const need = MIN[game] || 2;
+      const q = (queues[game] = queues[game].filter((w) => io.sockets.sockets.has(w.id)));
+      if (q.length + 1 >= need) {
         const r = newRoom(game);
-        join(ws, r, w.name);
+        q.splice(0, need - 1).forEach((w) => join(io.sockets.sockets.get(w.id), r, w.name));
         join(socket, r, cleanName(name));
         return;
       }
@@ -244,6 +330,7 @@ app.prepare().then(() => {
       const now = Date.now();
       if (!r || typeof text !== "string" || now - (socket.data.last || 0) < 300) return;
       socket.data.last = now;
+      if (r.game === "pictionary" && picChat(r, socket, text)) return;
       io.to(r.code).emit("chat", { id: socket.id, from: socket.data.name, text: text.slice(0, 200) });
     });
     socket.on("emote", (emoji) => {
@@ -282,6 +369,10 @@ app.prepare().then(() => {
 
     socket.on("rematch", () => {
       const r = mine(socket);
+      if (r && r.game === "pictionary") {
+        if (r.state && r.state.phase === "done" && r.players.length >= 2) startPic(r);
+        return;
+      }
       if (!r || r.players.length !== 2 || !r.state) return;
       const done = r.game === "tictactoe" ? r.state.winner : r.state.phase === "done";
       if (!done) return;
@@ -302,7 +393,7 @@ app.prepare().then(() => {
     // drawing board
     socket.on("draw", (d) => {
       const r = mine(socket);
-      if (!r || r.game !== "draw" || !d) return;
+      if (!r || !canDraw(r, socket.id) || !d) return;
       if (!["x0", "y0", "x1", "y1", "w"].every((k) => typeof d[k] === "number") || typeof d.c !== "string" || d.c.length > 9) return;
       const seg = { x0: d.x0, y0: d.y0, x1: d.x1, y1: d.y1, w: d.w, c: d.c };
       r.history.push(seg);
@@ -311,13 +402,13 @@ app.prepare().then(() => {
     });
     socket.on("draw:clear", () => {
       const r = mine(socket);
-      if (!r || r.game !== "draw") return;
+      if (!r || !canDraw(r, socket.id)) return;
       r.history = [];
       socket.to(r.code).emit("draw:clear");
     });
     socket.on("draw:sync", () => {
       const r = mine(socket);
-      if (r && r.game === "draw") socket.emit("draw:history", r.history);
+      if (r && (r.game === "draw" || r.game === "pictionary")) socket.emit("draw:history", r.history);
     });
   });
 

@@ -1,6 +1,6 @@
 # Arcade
 
-Realtime multiplayer games (Tic-tac-toe, Quiz battle, Drawing board, Arena shooter) with room codes,
+Realtime multiplayer games (Tic-tac-toe, Quiz battle, Drawing board, Arena shooter, Draw & guess for 4-5 players) with room codes,
 random matchmaking, live chat and emotes. Next.js + a custom Socket.IO server.
 
     npm install

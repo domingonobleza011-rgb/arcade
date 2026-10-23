@@ -88,7 +88,7 @@ function seg(g, { x0, y0, x1, y1, c, w }) {
   g.beginPath(); g.moveTo(x0 * 800, y0 * 500); g.lineTo(x1 * 800, y1 * 500); g.stroke();
 }
 
-export function Draw() {
+export function Draw({ readOnly = false }) {
   const s = getSocket();
   const ref = useRef(null);
   const last = useRef(null);
@@ -111,7 +111,7 @@ export function Draw() {
     const r = ref.current.getBoundingClientRect();
     return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height];
   };
-  const down = (e) => { ref.current.setPointerCapture(e.pointerId); last.current = pos(e); };
+  const down = (e) => { if (readOnly) return; ref.current.setPointerCapture(e.pointerId); last.current = pos(e); };
   const move = (e) => {
     if (!last.current) return;
     const [x1, y1] = pos(e);
@@ -124,7 +124,7 @@ export function Draw() {
 
   return (
     <div style={{ width: "100%" }}>
-      <div className="tools">
+      <div className="tools" hidden={readOnly}>
         {COLORS.map((c) => (
           <button key={c} className="sw" style={{ background: c }} aria-pressed={color === c}
             aria-label={c === "#ffffff" ? "Eraser" : `Color ${c}`} onClick={() => setColor(c)} />
@@ -132,7 +132,7 @@ export function Draw() {
         <input type="range" min="2" max="24" value={size} onChange={(e) => setSize(+e.target.value)} aria-label="Brush size" />
         <button onClick={() => { ref.current.getContext("2d").clearRect(0, 0, 800, 500); s.emit("draw:clear"); }}>Clear board</button>
       </div>
-      <canvas ref={ref} width={800} height={500} onPointerDown={down} onPointerMove={move}
+      <canvas ref={ref} width={800} height={500} style={readOnly ? { cursor: "default" } : undefined} onPointerDown={down} onPointerMove={move}
         onPointerUp={() => (last.current = null)} onPointerCancel={() => (last.current = null)} />
     </div>
   );
@@ -219,6 +219,60 @@ export function Shooter({ me }) {
     <div style={{ width: "100%" }}>
       <p className="meta">Move with WASD or arrows. Aim with the mouse and hold to shoot. First to 10 frags wins.</p>
       <canvas ref={ref} width={800} height={500} />
+    </div>
+  );
+}
+
+export function Pictionary({ room, me }) {
+  const s = getSocket();
+  const st = room.state;
+  const [left, setLeft] = useState(st.secs);
+
+  useEffect(() => {
+    if (st.phase !== "draw") return;
+    setLeft(st.secs);
+    const t = setInterval(() => setLeft((x) => Math.max(0, x - 1)), 1000);
+    return () => clearInterval(t);
+  }, [st.turn, st.phase]);
+
+  const nameOf = (id) => room.players.find((p) => p.id === id)?.name;
+  const ranked = [...room.players].sort((a, b) => (st.scores[b.id] || 0) - (st.scores[a.id] || 0));
+  const board = (
+    <div className="players" style={{ justifyContent: "center" }}>
+      {ranked.map((p) => (
+        <span key={p.id} className={`pill ${p.id === me ? "me" : ""}`}>
+          {st.phase !== "done" && p.id === st.drawer ? "✏️ " : st.phase === "draw" && st.guessed.includes(p.id) ? "✓ " : ""}
+          {p.name}: {st.scores[p.id] || 0}
+        </span>
+      ))}
+    </div>
+  );
+
+  if (st.phase === "done") {
+    return (
+      <>
+        <p className="status">{ranked[0].id === me ? "You win!" : `${ranked[0].name} wins!`}</p>
+        {board}
+        <button className="primary" onClick={() => s.emit("rematch")}>Play again</button>
+      </>
+    );
+  }
+
+  const isDrawer = st.drawer === me;
+  const line = st.phase === "reveal" ? `The word was “${st.word}”.`
+    : isDrawer ? `Draw this: ${st.word}`
+    : st.word ? `You got it! The word was “${st.word}”.`
+    : `Guess the word: ${"_ ".repeat(st.len).trim()} (${st.len} letters)`;
+
+  return (
+    <div style={{ width: "100%" }}>
+      {board}
+      <p className="meta" style={{ margin: "8px 0" }}>
+        Turn {st.turn + 1} of {st.total} · {nameOf(st.drawer)} is drawing{st.phase === "draw" ? ` · ${left}s` : ""}
+      </p>
+      <h2 className="status">{line}</h2>
+      <Draw readOnly={!isDrawer || st.phase !== "draw"} />
+      <p className="meta">Type your guess in the chat. Just the word, nothing else.</p>
     </div>
   );
 }

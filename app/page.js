@@ -8,6 +8,7 @@ const GAMES = [
   { id: "quiz", name: "Quiz battle", blurb: "5 questions. The first correct answer scores double. 2 players." },
   { id: "draw", name: "Drawing board", blurb: "Sketch together in real time. Up to 8 players." },
   { id: "shooter", name: "Arena shooter", blurb: "Top-down free-for-all. First to 10 frags wins. Up to 8 players. Desktop only." },
+  { id: "pictionary", name: "Draw & guess", blurb: "One player draws a secret word, everyone else guesses in chat. 4 to 5 players." },
 ];
 
 export default function Home() {

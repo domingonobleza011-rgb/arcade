@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { getSocket } from "../lib/socket";
-import { TicTacToe, Quiz, Draw, Shooter } from "./games";
+import { TicTacToe, Quiz, Draw, Shooter, Pictionary } from "./games";
 
 const EMOTES = ["👍", "😂", "😮", "🔥", "😢", "👏", "😎", "🤯"];
-const TITLES = { tictactoe: "Tic-tac-toe", quiz: "Quiz battle", draw: "Drawing board", shooter: "Arena shooter" };
+const TITLES = { tictactoe: "Tic-tac-toe", quiz: "Quiz battle", draw: "Drawing board", shooter: "Arena shooter", pictionary: "Draw & guess" };
 
 export default function Room({ room, me, onLeave }) {
   const s = getSocket();
@@ -36,7 +36,7 @@ export default function Room({ room, me, onLeave }) {
     setText("");
   };
 
-  const Game = { tictactoe: TicTacToe, quiz: Quiz, draw: Draw, shooter: Shooter }[room.game];
+  const Game = { tictactoe: TicTacToe, quiz: Quiz, draw: Draw, shooter: Shooter, pictionary: Pictionary }[room.game];
 
   return (
     <>
@@ -61,7 +61,7 @@ export default function Room({ room, me, onLeave }) {
       <div className="room">
         <section className="panel stage">
           {room.status === "waiting" ? (
-            <p className="status">Waiting for an opponent. Share code <span className="code">{room.code}</span></p>
+            <p className="status">Waiting for players ({room.players.length}/{room.min}). Share code <span className="code">{room.code}</span></p>
           ) : (
             <Game room={room} me={me} />
           )}
