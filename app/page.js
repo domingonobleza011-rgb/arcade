@@ -4,12 +4,14 @@ import { getSocket } from "../lib/socket";
 import Room from "../components/Room";
 
 const GAMES = [
-  { id: "tictactoe", name: "Tic-tac-toe", blurb: "Three in a row. 2 players." },
-  { id: "quiz", name: "Quiz battle", blurb: "5 questions. The first correct answer scores double. 2 players." },
+  { id: "tictactoe", name: "Tic-tac-toe", blurb: "Classic three in a row. 2 players." },
+  { id: "connect4", name: "Connect Four", blurb: "Drop discs and connect four. 2 players." },
+  { id: "checkers", name: "Checkers", blurb: "American checkers with kings and multi-jumps. 2 players." },
+  { id: "quiz", name: "Quiz battle", blurb: "5 random questions. First correct answer scores double. 2 players." },
   { id: "draw", name: "Drawing board", blurb: "Sketch together in real time. Up to 8 players." },
-  { id: "shooter", name: "Arena shooter", blurb: "Top-down free-for-all. First to 10 frags wins. Up to 8 players. Desktop only." },
-  { id: "pictionary", name: "Draw & guess", blurb: "One player draws a secret word, everyone else guesses in chat. 4 to 5 players." },
-  { id: "chat", name: "Chat room", blurb: "Hang out in the public lobby, or make a private room with a code. Up to 30 people." },
+  { id: "pictionary", name: "Draw & guess", blurb: "One draws a secret word, others guess in chat. 2 to 8 players." },
+  { id: "shooter", name: "Arena shooter", blurb: "Top-down free-for-all. First to 10 frags wins. Up to 8. Desktop only." },
+  { id: "chat", name: "Chat room", blurb: "Public lobby or private room with a code. Up to 30 people." },
 ];
 
 export default function Home() {

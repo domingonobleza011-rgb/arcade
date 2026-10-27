@@ -56,3 +56,26 @@ canvas{width:100%;margin-top:12px;background:#fff;border-radius:8px;touch-action
 .tools[hidden]{display:none}
 .side.wide{height:70vh;min-height:420px}
 .time{color:var(--muted);font-size:.72rem;margin-left:8px}
+
+/* Connect Four */
+.c4-board{display:flex;gap:4px;background:#0a1628;padding:10px;border-radius:12px;border:2px solid var(--line)}
+.c4-col{display:flex;flex-direction:column;gap:4px;padding:0;border:none;background:transparent;cursor:pointer}
+.c4-col:disabled{cursor:default;opacity:.85}
+.c4-col:not(:disabled):hover .c4-cell:first-child{box-shadow:inset 0 0 0 2px var(--sun)}
+.c4-cell{width:min(12vw,48px);height:min(12vw,48px);border-radius:50%;background:#132338;border:2px solid #0e1a2b}
+.c4-cell.R{background:var(--coral);box-shadow:inset 0 -4px 0 rgba(0,0,0,.25)}
+.c4-cell.Y{background:var(--sun);box-shadow:inset 0 -4px 0 rgba(0,0,0,.2)}
+.c4-dot{display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:middle;margin:0 4px}
+.c4-dot.R{background:var(--coral)}.c4-dot.Y{background:var(--sun)}
+
+/* Checkers */
+.ck-board{display:grid;grid-template-columns:repeat(8,min(11vw,48px));gap:0;border:3px solid #1a2a40;border-radius:8px;overflow:hidden;width:fit-content;margin:0 auto}
+.ck-cell{aspect-ratio:1;width:100%;padding:0;border:none;border-radius:0;display:flex;align-items:center;justify-content:center}
+.ck-cell.light{background:#d4a574}
+.ck-cell.dark{background:#5c3d2e}
+.ck-cell.sel{box-shadow:inset 0 0 0 3px var(--sun)}
+.ck-cell:disabled{cursor:default}
+.ck-piece{width:72%;height:72%;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.1rem;line-height:1;box-shadow:0 2px 4px rgba(0,0,0,.4)}
+.ck-piece.r{background:linear-gradient(145deg,#ff7b7b,#c0392b);color:#fff}
+.ck-piece.b{background:linear-gradient(145deg,#4a4a4a,#1a1a1a);color:#ffd23f}
+.ck-piece.king{box-shadow:0 0 0 2px var(--sun),0 2px 4px rgba(0,0,0,.4)}

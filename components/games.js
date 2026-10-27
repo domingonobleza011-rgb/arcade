@@ -27,6 +27,96 @@ export function TicTacToe({ room, me }) {
   );
 }
 
+export function Connect4({ room, me }) {
+  const s = getSocket();
+  const st = room.state;
+  const color = st.colors[me];
+  const myTurn = st.turn === color && !st.winner;
+  const nameOf = (c) => room.players.find((p) => st.colors[p.id] === c)?.name;
+  const status = st.winner === "draw" ? "It's a draw."
+    : st.winner ? (st.winner === color ? "You win!" : `${nameOf(st.winner)} wins.`)
+    : myTurn ? "Your turn — pick a column" : `${nameOf(st.turn)}'s turn`;
+
+  return (
+    <>
+      <p className="status">You are <span className={`c4-dot ${color}`} /> {color === "R" ? "Red" : "Yellow"}. {status}</p>
+      <div className="c4-board" role="grid" aria-label="Connect Four board">
+        {Array.from({ length: 7 }, (_, col) => (
+          <button
+            key={col}
+            className="c4-col"
+            disabled={!myTurn || st.board[col][0] !== null}
+            onClick={() => s.emit("c4:drop", col)}
+            aria-label={`Column ${col + 1}`}
+          >
+            {st.board[col].map((cell, row) => (
+              <span key={row} className={`c4-cell ${cell || ""}`} />
+            ))}
+          </button>
+        ))}
+      </div>
+      {st.winner && <button className="primary" onClick={() => s.emit("rematch")}>Play again</button>}
+    </>
+  );
+}
+
+export function Checkers({ room, me }) {
+  const s = getSocket();
+  const st = room.state;
+  const side = st.sides[me]; // "r" or "b"
+  const myTurn = st.turn === side && !st.winner;
+  const nameOf = (sd) => room.players.find((p) => st.sides[p.id] === sd)?.name;
+  const [sel, setSel] = useState(null);
+
+  useEffect(() => { setSel(null); }, [st.board, st.turn, st.mustContinue]);
+
+  const status = st.winner === "draw" ? "It's a draw."
+    : st.winner ? (st.winner === side ? "You win!" : `${nameOf(st.winner)} wins.`)
+    : st.mustContinue ? "Continue jumping!"
+    : myTurn ? "Your turn — select a piece, then a square" : `${nameOf(st.turn)}'s turn`;
+
+  const onCell = (r, c) => {
+    if (!myTurn) return;
+    const piece = st.board[r][c];
+    if (sel) {
+      if (sel.r === r && sel.c === c) { setSel(null); return; }
+      s.emit("ck:move", { from: [sel.r, sel.c], to: [r, c] });
+      return;
+    }
+    if (piece && piece.toLowerCase() === side) setSel({ r, c });
+  };
+
+  return (
+    <>
+      <p className="status">You are {side === "r" ? "Red" : "Black"}. {status}</p>
+      <div className="ck-board" role="grid">
+        {st.board.map((row, r) =>
+          row.map((cell, c) => {
+            const dark = (r + c) % 2 === 1;
+            const selected = sel && sel.r === r && sel.c === c;
+            return (
+              <button
+                key={`${r}-${c}`}
+                className={`ck-cell ${dark ? "dark" : "light"} ${selected ? "sel" : ""}`}
+                disabled={!dark || !myTurn}
+                onClick={() => dark && onCell(r, c)}
+                aria-label={`Row ${r + 1} col ${c + 1}`}
+              >
+                {cell && (
+                  <span className={`ck-piece ${cell.toLowerCase()} ${cell === cell.toUpperCase() ? "king" : ""}`}>
+                    {cell === cell.toUpperCase() ? "♔" : ""}
+                  </span>
+                )}
+              </button>
+            );
+          })
+        )}
+      </div>
+      {st.winner && <button className="primary" onClick={() => s.emit("rematch")}>Play again</button>}
+    </>
+  );
+}
+
 export function Quiz({ room, me }) {
   const s = getSocket();
   const st = room.state;

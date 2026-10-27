@@ -1,10 +1,14 @@
 # Arcade
 
-Realtime multiplayer games (Tic-tac-toe, Quiz battle, Drawing board, Arena shooter, Draw & guess for 4-5 players, group Chat rooms) with room codes,
-random matchmaking, live chat and emotes. Next.js + a custom Socket.IO server.
+Realtime multiplayer games with room codes, random matchmaking, live chat and emotes.
+Next.js + a custom Socket.IO server.
 
-    npm install
-    npm run dev        # http://localhost:3000 (open two tabs to test)
+**Games:** Tic-tac-toe · Connect Four · Checkers · Quiz battle · Drawing board · Draw & guess (2–8 players) · Arena shooter · Chat rooms
+
+```bash
+npm install
+npm run dev        # http://localhost:3000 (open two tabs to test)
+```
 
 ## Deploy (Render / Railway / Fly, NOT Vercel)
 Vercel serverless can't hold WebSocket connections. Use any Node host:

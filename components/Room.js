@@ -1,10 +1,19 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { getSocket } from "../lib/socket";
-import { TicTacToe, Quiz, Draw, Shooter, Pictionary } from "./games";
+import { TicTacToe, Quiz, Draw, Shooter, Pictionary, Connect4, Checkers } from "./games";
 
 const EMOTES = ["👍", "😂", "😮", "🔥", "😢", "👏", "😎", "🤯"];
-const TITLES = { tictactoe: "Tic-tac-toe", quiz: "Quiz battle", draw: "Drawing board", shooter: "Arena shooter", pictionary: "Draw & guess", chat: "Chat room" };
+const TITLES = {
+  tictactoe: "Tic-tac-toe",
+  quiz: "Quiz battle",
+  draw: "Drawing board",
+  shooter: "Arena shooter",
+  pictionary: "Draw & guess",
+  chat: "Chat room",
+  connect4: "Connect Four",
+  checkers: "Checkers",
+};
 
 export default function Room({ room, me, onLeave }) {
   const s = getSocket();
@@ -39,7 +48,15 @@ export default function Room({ room, me, onLeave }) {
     setText("");
   };
 
-  const Game = { tictactoe: TicTacToe, quiz: Quiz, draw: Draw, shooter: Shooter, pictionary: Pictionary }[room.game];
+  const Game = {
+    tictactoe: TicTacToe,
+    quiz: Quiz,
+    draw: Draw,
+    shooter: Shooter,
+    pictionary: Pictionary,
+    connect4: Connect4,
+    checkers: Checkers,
+  }[room.game];
   const isChat = room.game === "chat";
 
   return (

@@ -7,8 +7,8 @@ const port = process.env.PORT || 3000;
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
-const MAX = { tictactoe: 2, quiz: 2, draw: 8, shooter: 8, pictionary: 5, chat: 30 };
-const MIN = { pictionary: 4 };
+const MAX = { tictactoe: 2, quiz: 2, draw: 8, shooter: 8, pictionary: 8, chat: 30, connect4: 2, checkers: 2 };
+const MIN = { pictionary: 2 };
 const EMOTES = ["👍", "😂", "😮", "🔥", "😢", "👏", "😎", "🤯"];
 const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 const BANK = [
@@ -22,11 +22,21 @@ const BANK = [
   { text: "Which element has the symbol Fe?", options: ["Iron", "Fluorine", "Lead", "Tin"], answer: 0 },
   { text: "What is the fastest land animal?", options: ["Lion", "Horse", "Cheetah", "Greyhound"], answer: 2 },
   { text: "Which language has the most native speakers?", options: ["English", "Spanish", "Hindi", "Mandarin Chinese"], answer: 3 },
+  { text: "What is the smallest prime number?", options: ["0", "1", "2", "3"], answer: 2 },
+  { text: "Which country invented pizza?", options: ["France", "Italy", "Greece", "Spain"], answer: 1 },
+  { text: "How many bones are in the adult human body?", options: ["186", "206", "226", "256"], answer: 1 },
+  { text: "What is H2O better known as?", options: ["Salt", "Hydrogen", "Water", "Oxygen"], answer: 2 },
+  { text: "Which planet is closest to the Sun?", options: ["Venus", "Earth", "Mercury", "Mars"], answer: 2 },
+  { text: "What year did World War II end?", options: ["1943", "1944", "1945", "1946"], answer: 2 },
+  { text: "Which animal is known as the King of the Jungle?", options: ["Tiger", "Lion", "Elephant", "Gorilla"], answer: 1 },
+  { text: "How many colors are in a rainbow?", options: ["5", "6", "7", "8"], answer: 2 },
+  { text: "What is the capital of France?", options: ["Lyon", "Marseille", "Paris", "Nice"], answer: 2 },
+  { text: "Which instrument has 88 keys?", options: ["Guitar", "Violin", "Piano", "Flute"], answer: 2 },
 ];
 
 const shuffle = (a) => [...a].sort(() => Math.random() - 0.5);
 const rooms = new Map();
-const queues = { tictactoe: [], quiz: [], draw: [], shooter: [], pictionary: [], chat: [] };
+const queues = { tictactoe: [], quiz: [], draw: [], shooter: [], pictionary: [], chat: [], connect4: [], checkers: [] };
 const newCode = () => {
   let c;
   do c = Array.from({ length: 4 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ"[Math.floor(Math.random() * 24)]).join("");
@@ -44,10 +54,103 @@ app.prepare().then(() => {
   };
   const sys = (r, text) => emitChat(r, { sys: true, text });
 
+  // ---- Connect Four helpers ----
+  function c4Win(board, col, row, color) {
+    const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+    for (const [dc, dr] of dirs) {
+      let n = 1;
+      for (const s of [1, -1]) {
+        for (let i = 1; i < 4; i++) {
+          const c = col + dc * s * i, r = row + dr * s * i;
+          if (c < 0 || c > 6 || r < 0 || r > 5 || board[c][r] !== color) break;
+          n++;
+        }
+      }
+      if (n >= 4) return true;
+    }
+    return false;
+  }
+
+  // ---- Checkers helpers ----
+  function ckInitBoard() {
+    const b = Array.from({ length: 8 }, () => Array(8).fill(null));
+    for (let r = 0; r < 3; r++)
+      for (let c = 0; c < 8; c++)
+        if ((r + c) % 2 === 1) b[r][c] = "b";
+    for (let r = 5; r < 8; r++)
+      for (let c = 0; c < 8; c++)
+        if ((r + c) % 2 === 1) b[r][c] = "r";
+    return b;
+  }
+  function ckPieceSide(p) { return p ? p.toLowerCase() : null; }
+  function ckIsKing(p) { return p && p === p.toUpperCase(); }
+  function ckDirs(p) {
+    const side = ckPieceSide(p);
+    const king = ckIsKing(p);
+    if (king) return [[-1,-1],[-1,1],[1,-1],[1,1]];
+    return side === "r" ? [[-1,-1],[-1,1]] : [[1,-1],[1,1]];
+  }
+  function ckOnBoard(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
+  function ckJumpsFrom(board, r, c) {
+    const p = board[r][c];
+    if (!p) return [];
+    const side = ckPieceSide(p);
+    const jumps = [];
+    for (const [dr, dc] of ckDirs(p)) {
+      const mr = r + dr, mc = c + dc;
+      const lr = r + 2 * dr, lc = c + 2 * dc;
+      if (!ckOnBoard(lr, lc) || board[lr][lc]) continue;
+      const mid = board[mr]?.[mc];
+      if (mid && ckPieceSide(mid) !== side) jumps.push({ to: [lr, lc], capture: [mr, mc] });
+    }
+    return jumps;
+  }
+  function ckSimpleMoves(board, r, c) {
+    const p = board[r][c];
+    if (!p) return [];
+    const moves = [];
+    for (const [dr, dc] of ckDirs(p)) {
+      const nr = r + dr, nc = c + dc;
+      if (ckOnBoard(nr, nc) && !board[nr][nc]) moves.push({ to: [nr, nc] });
+    }
+    return moves;
+  }
+  function ckAllJumps(board, side) {
+    const list = [];
+    for (let r = 0; r < 8; r++)
+      for (let c = 0; c < 8; c++)
+        if (ckPieceSide(board[r][c]) === side)
+          for (const j of ckJumpsFrom(board, r, c)) list.push({ from: [r, c], ...j });
+    return list;
+  }
+  function ckHasMoves(board, side) {
+    for (let r = 0; r < 8; r++)
+      for (let c = 0; c < 8; c++)
+        if (ckPieceSide(board[r][c]) === side) {
+          if (ckJumpsFrom(board, r, c).length || ckSimpleMoves(board, r, c).length) return true;
+        }
+    return false;
+  }
+  function ckPromote(board, r, c) {
+    const p = board[r][c];
+    if (!p || ckIsKing(p)) return;
+    if ((p === "r" && r === 0) || (p === "b" && r === 7)) board[r][c] = p.toUpperCase();
+  }
+  function ckCount(board, side) {
+    let n = 0;
+    for (const row of board) for (const p of row) if (ckPieceSide(p) === side) n++;
+    return n;
+  }
+
   function publicState(r) {
     const s = r.state;
     if (!s) return null;
     if (r.game === "tictactoe") return { board: s.board, turn: s.turn, winner: s.winner, marks: s.marks };
+    if (r.game === "connect4") return { board: s.board, turn: s.turn, winner: s.winner, colors: s.colors };
+    if (r.game === "checkers") return {
+      board: s.board, turn: s.turn, winner: s.winner, sides: s.sides,
+      mustContinue: s.mustContinue ? { r: s.mustContinue.r, c: s.mustContinue.c } : null,
+    };
     if (r.game === "quiz") {
       const q = s.qs[s.i];
       return {
@@ -90,6 +193,24 @@ app.prepare().then(() => {
     if (r.game === "tictactoe") {
       const [a, b] = r.players;
       r.state = { board: Array(9).fill(null), turn: "X", winner: null, marks: { [a.id]: "X", [b.id]: "O" } };
+    }
+    if (r.game === "connect4") {
+      const [a, b] = r.players;
+      // board[col][row], row 0 is top
+      r.state = {
+        board: Array.from({ length: 7 }, () => Array(6).fill(null)),
+        turn: "R", winner: null,
+        colors: { [a.id]: "R", [b.id]: "Y" },
+      };
+    }
+    if (r.game === "checkers") {
+      const [a, b] = r.players;
+      r.state = {
+        board: ckInitBoard(),
+        turn: "r", winner: null,
+        sides: { [a.id]: "r", [b.id]: "b" },
+        mustContinue: null,
+      };
     }
     if (r.game === "quiz") {
       r.state = {
@@ -169,8 +290,8 @@ app.prepare().then(() => {
     });
   }
 
-  // ---- Draw & guess (4-5 players): one draws, everyone else guesses in chat ----
-  const WORDS = ["cat","house","tree","sun","car","pizza","guitar","rocket","bridge","banana","umbrella","castle","bicycle","robot","dragon","snowman","volcano","rainbow","spider","airplane","camera","pirate","cactus","lighthouse","penguin","tornado","helmet","ladder","mushroom","window","elephant","scissors","sandwich","whale","mountain","balloon","crown","key","clock","fish"];
+  // ---- Draw & guess (2–8 players): one draws, everyone else guesses in chat ----
+  const WORDS = ["cat","house","tree","sun","car","pizza","guitar","rocket","bridge","banana","umbrella","castle","bicycle","robot","dragon","snowman","volcano","rainbow","spider","airplane","camera","pirate","cactus","lighthouse","penguin","tornado","helmet","ladder","mushroom","window","elephant","scissors","sandwich","whale","mountain","balloon","crown","key","clock","fish","dolphin","firetruck","octopus","submarine","telescope","unicorn","vampire","wizard","zombie","mermaid","spaceship"];
   const canDraw = (r, id) =>
     r.game === "draw" ||
     (r.game === "pictionary" && r.state && r.state.phase === "draw" && r.state.order[r.state.turn] === id);
@@ -269,7 +390,7 @@ app.prepare().then(() => {
     }
     else if (r.game === "pictionary") {
       if (r.state) { r.state.scores[socket.id] = 0; push(r); }
-      else if (r.players.length >= MIN.pictionary) startPic(r);
+      else if (r.players.length >= (MIN.pictionary || 2)) startPic(r);
       else push(r);
     }
     else if (r.players.length === 2) start(r);
@@ -370,6 +491,76 @@ app.prepare().then(() => {
       push(r);
     });
 
+    // connect four
+    socket.on("c4:drop", (col) => {
+      const r = mine(socket);
+      if (!r || r.game !== "connect4" || !r.state) return;
+      const s = r.state;
+      if (s.winner || !Number.isInteger(col) || col < 0 || col > 6 || s.colors[socket.id] !== s.turn) return;
+      const column = s.board[col];
+      let row = -1;
+      for (let i = 5; i >= 0; i--) if (column[i] === null) { row = i; break; }
+      if (row < 0) return;
+      column[row] = s.turn;
+      if (c4Win(s.board, col, row, s.turn)) s.winner = s.turn;
+      else if (s.board.every((c) => c.every(Boolean))) s.winner = "draw";
+      else s.turn = s.turn === "R" ? "Y" : "R";
+      push(r);
+    });
+
+    // checkers
+    socket.on("ck:move", ({ from, to } = {}) => {
+      const r = mine(socket);
+      if (!r || r.game !== "checkers" || !r.state) return;
+      const s = r.state;
+      if (s.winner || !Array.isArray(from) || !Array.isArray(to)) return;
+      const [fr, fc] = from.map(Number);
+      const [tr, tc] = to.map(Number);
+      if (!ckOnBoard(fr, fc) || !ckOnBoard(tr, tc)) return;
+      if (s.sides[socket.id] !== s.turn) return;
+      const piece = s.board[fr][fc];
+      if (!piece || ckPieceSide(piece) !== s.turn) return;
+
+      // if mid-jump sequence, must continue from that piece
+      if (s.mustContinue) {
+        if (fr !== s.mustContinue.r || fc !== s.mustContinue.c) return;
+      }
+
+      const jumps = ckJumpsFrom(s.board, fr, fc);
+      const jump = jumps.find((j) => j.to[0] === tr && j.to[1] === tc);
+      const simples = s.mustContinue ? [] : ckSimpleMoves(s.board, fr, fc);
+      const simple = simples.find((m) => m.to[0] === tr && m.to[1] === tc);
+
+      // prefer / require jumps when available from this piece or anywhere (American rules: jumps mandatory)
+      const anyJumps = ckAllJumps(s.board, s.turn);
+      if (!s.mustContinue && anyJumps.length && !jump) return; // must jump if possible
+      if (!jump && !simple) return;
+
+      // apply move
+      s.board[tr][tc] = piece;
+      s.board[fr][fc] = null;
+      if (jump) {
+        const [cr, cc] = jump.capture;
+        s.board[cr][cc] = null;
+        ckPromote(s.board, tr, tc);
+        const more = ckJumpsFrom(s.board, tr, tc);
+        if (more.length) {
+          s.mustContinue = { r: tr, c: tc };
+          push(r);
+          return;
+        }
+      } else {
+        ckPromote(s.board, tr, tc);
+      }
+      s.mustContinue = null;
+
+      // win / switch turn
+      const opp = s.turn === "r" ? "b" : "r";
+      if (ckCount(s.board, opp) === 0 || !ckHasMoves(s.board, opp)) s.winner = s.turn;
+      else s.turn = opp;
+      push(r);
+    });
+
     // quiz battle
     socket.on("answer", (choice) => {
       const r = mine(socket);
@@ -392,7 +583,10 @@ app.prepare().then(() => {
         return;
       }
       if (!r || r.players.length !== 2 || !r.state) return;
-      const done = r.game === "tictactoe" ? r.state.winner : r.state.phase === "done";
+      const done =
+        r.game === "tictactoe" || r.game === "connect4" || r.game === "checkers" ? r.state.winner
+        : r.game === "quiz" ? r.state.phase === "done"
+        : false;
       if (!done) return;
       r.players.reverse();
       start(r);
