@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { getSocket } from "../lib/socket";
-import { TicTacToe, Quiz, Draw, Shooter, Pictionary, Connect4, Checkers, RPS, Memory, Hangman } from "./games";
+import { TicTacToe, Quiz, Draw, Shooter, Pictionary, Connect4, Checkers, RPS, Memory, Hangman } from "./games";\nimport MediaControls from "./MediaControls";
 
 const EMOTES = ["👍", "😂", "😮", "🔥", "😢", "👏", "😎", "🤯"];
 const TITLES = {
@@ -85,7 +85,7 @@ export default function Room({ room, me, onLeave }) {
         </div>
       </div>
 
-      <div className="room" style={isChat ? { gridTemplateColumns: "1fr" } : undefined}>
+      <MediaControls />\n\n      <div className="room" style={isChat ? { gridTemplateColumns: "1fr" } : undefined}>
         {!isChat && <section className="panel stage">
           {room.status === "waiting" ? (
             <p className="status">Waiting for players ({room.players.length}/{room.min}). Share code <span className="code">{room.code}</span></p>
