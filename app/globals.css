@@ -110,6 +110,12 @@ canvas{width:100%;margin-top:12px;background:#fff;border-radius:8px;touch-action
 .media-actions .media-active{border-color:var(--mint);box-shadow:inset 0 0 0 1px var(--mint)}
 .media-preview{display:block;width:min(100%,320px);max-height:240px;object-fit:cover;aspect-ratio:4/3;background:#07101c;border:1px solid var(--line);border-radius:10px}
 .media-hidden{display:none}
+.media-videos{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
+.remote-media{display:flex;flex-direction:column;gap:5px;max-width:min(100%,320px)}
+.remote-media .media-preview{width:min(100%,320px)}
+.remote-name{font-size:.82rem;color:var(--muted)}
+.media-placeholder{width:min(100%,320px);min-width:180px;aspect-ratio:4/3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:1px dashed var(--line);border-radius:10px;background:#07101c;color:#fff}
+.media-placeholder small{font-size:.78rem;color:#aab6c8}
 .media-note{font-size:.8rem;color:var(--muted);margin:0}
 .media-error{color:var(--coral);margin:0;font-size:.9rem}
 @media(max-width:600px){.media-heading{align-items:flex-start}.media-actions{width:100%}.media-actions button{flex:1}}

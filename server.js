@@ -512,6 +512,14 @@ app.prepare().then(() => {
       join(socket, r, cleanName(name));
     });
 
+    // WebRTC signaling is relayed only between players in the same room.
+    socket.on("media:signal", ({ to, signal } = {}) => {
+      const r = mine(socket);
+      const target = typeof to === "string" ? io.sockets.sockets.get(to) : null;
+      if (!r || !target || target.data?.code !== r.code || !signal) return;
+      target.emit("media:signal", { from: socket.id, signal });
+    });
+
     socket.on("leave", () => leave(socket));
     socket.on("disconnect", () => leave(socket));
 

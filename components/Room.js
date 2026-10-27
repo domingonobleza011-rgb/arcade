@@ -86,7 +86,7 @@ export default function Room({ room, me, onLeave }) {
         </div>
       </div>
 
-      <MediaControls />
+      <MediaControls room={room} me={me} />
 
       <div className="room" style={isChat ? { gridTemplateColumns: "1fr" } : undefined}>
         {!isChat && <section className="panel stage">
