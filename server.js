@@ -7,10 +7,14 @@ const port = process.env.PORT || 3000;
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
-const MAX = { tictactoe: 2, quiz: 2, draw: 8, shooter: 8, pictionary: 8, chat: 30, connect4: 2, checkers: 2 };
+const MAX = { tictactoe: 2, quiz: 2, draw: 8, shooter: 8, pictionary: 8, chat: 30, connect4: 2, checkers: 2, rps: 2, memory: 2, hangman: 2 };
 const MIN = { pictionary: 2 };
 const EMOTES = ["👍", "😂", "😮", "🔥", "😢", "👏", "😎", "🤯"];
 const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+const RPS = ["rock", "paper", "scissors"];
+const RPS_BEATS = { rock: "scissors", paper: "rock", scissors: "paper" };
+const MEMORY_ICONS = ["🍎","🍋","🍇","🍒","🍑","🥝","🍉","🍓"];
+const HANG_WORDS = ["planet","guitar","castle","dragon","window","bridge","pirate","rocket","jungle","mirror","puzzle","summer","winter","forest","ocean","thunder","diamond","phoenix","whisper","galaxy"];
 const BANK = [
   { text: "Which planet is known as the Red Planet?", options: ["Venus", "Mars", "Jupiter", "Mercury"], answer: 1 },
   { text: "What is the capital of Japan?", options: ["Kyoto", "Osaka", "Tokyo", "Nagoya"], answer: 2 },
@@ -36,7 +40,7 @@ const BANK = [
 
 const shuffle = (a) => [...a].sort(() => Math.random() - 0.5);
 const rooms = new Map();
-const queues = { tictactoe: [], quiz: [], draw: [], shooter: [], pictionary: [], chat: [], connect4: [], checkers: [] };
+const queues = { tictactoe: [], quiz: [], draw: [], shooter: [], pictionary: [], chat: [], connect4: [], checkers: [], rps: [], memory: [], hangman: [] };
 const newCode = () => {
   let c;
   do c = Array.from({ length: 4 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ"[Math.floor(Math.random() * 24)]).join("");
@@ -159,6 +163,33 @@ app.prepare().then(() => {
         reveal: s.phase === "reveal" ? { answer: q.answer, picks: s.picks } : null,
       };
     }
+    if (r.game === "rps") {
+      return {
+        phase: s.phase, scores: s.scores, target: s.target, round: s.round,
+        picked: Object.keys(s.picks || {}),
+        reveal: s.phase === "reveal" ? { picks: s.picks, result: s.result } : null,
+        winner: s.winner,
+      };
+    }
+    if (r.game === "memory") {
+      return {
+        cards: s.cards.map((c) => ({ id: c.id, icon: (c.flipped || c.matched) ? c.icon : null, flipped: c.flipped, matched: c.matched })),
+        turn: s.turn, scores: s.scores, winner: s.winner, lock: s.lock,
+      };
+    }
+    if (r.game === "hangman") {
+      return {
+        wordLen: s.word.length,
+        masked: s.word.split("").map((ch) => s.guessed.includes(ch) ? ch : "_").join(""),
+        guessed: s.guessed,
+        wrong: s.wrong,
+        maxWrong: s.maxWrong,
+        turn: s.turn,
+        guesser: s.guesser,
+        winner: s.winner,
+        reveal: s.winner ? s.word : null,
+      };
+    }
     return null;
   }
   const view = (r, state) => ({
@@ -218,6 +249,31 @@ app.prepare().then(() => {
         scores: Object.fromEntries(r.players.map((p) => [p.id, 0])),
       };
       return nextQ(r);
+    }
+    if (r.game === "rps") {
+      r.state = {
+        phase: "pick", picks: {}, result: null, round: 1, target: 3,
+        scores: Object.fromEntries(r.players.map((p) => [p.id, 0])),
+        winner: null, timer: null,
+      };
+    }
+    if (r.game === "memory") {
+      const icons = shuffle([...MEMORY_ICONS, ...MEMORY_ICONS]);
+      r.state = {
+        cards: icons.map((icon, id) => ({ id, icon, flipped: false, matched: false })),
+        turn: r.players[0].id,
+        scores: Object.fromEntries(r.players.map((p) => [p.id, 0])),
+        first: null, lock: false, winner: null, timer: null,
+      };
+    }
+    if (r.game === "hangman") {
+      const [a, b] = r.players;
+      r.state = {
+        word: HANG_WORDS[Math.floor(Math.random() * HANG_WORDS.length)],
+        guessed: [], wrong: 0, maxWrong: 6,
+        guesser: a.id, turn: a.id,
+        winner: null,
+      };
     }
     push(r);
   }
@@ -576,6 +632,100 @@ app.prepare().then(() => {
       else push(r);
     });
 
+    // rock-paper-scissors
+    socket.on("rps:pick", (choice) => {
+      const r = mine(socket);
+      if (!r || r.game !== "rps" || !r.state || r.state.phase !== "pick") return;
+      const s = r.state;
+      if (s.winner || s.picks[socket.id] || !RPS.includes(choice)) return;
+      s.picks[socket.id] = choice;
+      if (Object.keys(s.picks).length < 2) return push(r);
+      const [a, b] = r.players;
+      const pa = s.picks[a.id], pb = s.picks[b.id];
+      let result = "draw";
+      if (pa !== pb) {
+        if (RPS_BEATS[pa] === pb) { s.scores[a.id]++; result = a.id; }
+        else { s.scores[b.id]++; result = b.id; }
+      }
+      s.result = result;
+      s.phase = "reveal";
+      push(r);
+      clearTimeout(s.timer);
+      s.timer = setTimeout(() => {
+        if (s.scores[a.id] >= s.target || s.scores[b.id] >= s.target) {
+          s.winner = s.scores[a.id] >= s.target ? a.id : b.id;
+          s.phase = "done";
+        } else {
+          s.round++;
+          s.phase = "pick";
+          s.picks = {};
+          s.result = null;
+        }
+        push(r);
+      }, 2200);
+    });
+
+    // memory match
+    socket.on("mem:flip", (idx) => {
+      const r = mine(socket);
+      if (!r || r.game !== "memory" || !r.state) return;
+      const s = r.state;
+      if (s.winner || s.lock || s.turn !== socket.id || !Number.isInteger(idx) || idx < 0 || idx >= s.cards.length) return;
+      const card = s.cards[idx];
+      if (card.flipped || card.matched) return;
+      card.flipped = true;
+      if (s.first === null) {
+        s.first = idx;
+        return push(r);
+      }
+      const a = s.cards[s.first], b = card;
+      s.lock = true;
+      push(r);
+      clearTimeout(s.timer);
+      s.timer = setTimeout(() => {
+        if (a.icon === b.icon) {
+          a.matched = b.matched = true;
+          s.scores[socket.id]++;
+          const left = s.cards.filter((c) => !c.matched).length;
+          if (left === 0) {
+            const [p0, p1] = r.players;
+            s.winner = s.scores[p0.id] === s.scores[p1.id] ? "draw"
+              : s.scores[p0.id] > s.scores[p1.id] ? p0.id : p1.id;
+          }
+        } else {
+          a.flipped = b.flipped = false;
+          s.turn = r.players.find((p) => p.id !== socket.id).id;
+        }
+        s.first = null;
+        s.lock = false;
+        push(r);
+      }, 900);
+    });
+
+    // hangman
+    socket.on("hang:guess", (letter) => {
+      const r = mine(socket);
+      if (!r || r.game !== "hangman" || !r.state) return;
+      const s = r.state;
+      if (s.winner || s.turn !== socket.id) return;
+      const ch = String(letter || "").toLowerCase().slice(0, 1);
+      if (!/^[a-z]$/.test(ch) || s.guessed.includes(ch)) return;
+      s.guessed.push(ch);
+      if (!s.word.includes(ch)) {
+        s.wrong++;
+        if (s.wrong >= s.maxWrong) {
+          s.winner = r.players.find((p) => p.id !== s.guesser).id; // word setter / opponent wins
+        } else {
+          // stay on guesser
+        }
+      } else {
+        if (s.word.split("").every((c) => s.guessed.includes(c))) {
+          s.winner = s.guesser;
+        }
+      }
+      push(r);
+    });
+
     socket.on("rematch", () => {
       const r = mine(socket);
       if (r && r.game === "pictionary") {
@@ -584,8 +734,9 @@ app.prepare().then(() => {
       }
       if (!r || r.players.length !== 2 || !r.state) return;
       const done =
-        r.game === "tictactoe" || r.game === "connect4" || r.game === "checkers" ? r.state.winner
+        r.game === "tictactoe" || r.game === "connect4" || r.game === "checkers" || r.game === "memory" || r.game === "hangman" ? r.state.winner
         : r.game === "quiz" ? r.state.phase === "done"
+        : r.game === "rps" ? r.state.winner || r.state.phase === "done"
         : false;
       if (!done) return;
       r.players.reverse();

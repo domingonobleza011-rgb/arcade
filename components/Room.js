@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { getSocket } from "../lib/socket";
-import { TicTacToe, Quiz, Draw, Shooter, Pictionary, Connect4, Checkers } from "./games";
+import { TicTacToe, Quiz, Draw, Shooter, Pictionary, Connect4, Checkers, RPS, Memory, Hangman } from "./games";
 
 const EMOTES = ["👍", "😂", "😮", "🔥", "😢", "👏", "😎", "🤯"];
 const TITLES = {
@@ -13,6 +13,9 @@ const TITLES = {
   chat: "Chat room",
   connect4: "Connect Four",
   checkers: "Checkers",
+  rps: "Rock Paper Scissors",
+  memory: "Memory Match",
+  hangman: "Hangman",
 };
 
 export default function Room({ room, me, onLeave }) {
@@ -56,6 +59,9 @@ export default function Room({ room, me, onLeave }) {
     pictionary: Pictionary,
     connect4: Connect4,
     checkers: Checkers,
+    rps: RPS,
+    memory: Memory,
+    hangman: Hangman,
   }[room.game];
   const isChat = room.game === "chat";
 

@@ -3,7 +3,7 @@
 Realtime multiplayer games with room codes, random matchmaking, live chat and emotes.
 Next.js + a custom Socket.IO server.
 
-**Games:** Tic-tac-toe · Connect Four · Checkers · Quiz battle · Drawing board · Draw & guess (2–8 players) · Arena shooter · Chat rooms
+**Games:** Tic-tac-toe · Connect Four · Checkers · Rock Paper Scissors · Memory Match · Hangman · Quiz battle · Drawing board · Draw & guess (2–8 players) · Arena shooter · Chat rooms
 
 ```bash
 npm install

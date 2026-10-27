@@ -366,3 +366,146 @@ export function Pictionary({ room, me }) {
     </div>
   );
 }
+
+const RPS_EMOJI = { rock: "🪨", paper: "📄", scissors: "✂️" };
+
+export function RPS({ room, me }) {
+  const s = getSocket();
+  const st = room.state;
+  const myScore = st.scores[me] || 0;
+  const opp = room.players.find((p) => p.id !== me);
+  const oppScore = opp ? (st.scores[opp.id] || 0) : 0;
+  const iPicked = st.picked?.includes(me);
+  const done = st.winner || st.phase === "done";
+
+  const status = done
+    ? (st.winner === me ? "You win the match!" : st.winner === "draw" ? "Tie match." : `${opp?.name} wins the match.`)
+    : st.phase === "reveal"
+      ? (st.reveal?.result === me ? "You take the round!" : st.reveal?.result === "draw" ? "Round draw." : `${opp?.name} takes the round.`)
+      : iPicked ? "Waiting for opponent…" : "Pick one!";
+
+  return (
+    <>
+      <p className="status">Best of {st.target * 2 - 1} · First to {st.target}</p>
+      <div className="players">
+        <span className="pill me">You: {myScore}</span>
+        <span className="pill">{opp?.name}: {oppScore}</span>
+      </div>
+      <p className="meta">Round {st.round}</p>
+      <h2 className="status">{status}</h2>
+      {st.phase === "reveal" && st.reveal && (
+        <div className="rps-reveal">
+          <div><span className="rps-big">{RPS_EMOJI[st.reveal.picks[me]]}</span><div>You</div></div>
+          <div className="meta">vs</div>
+          <div><span className="rps-big">{RPS_EMOJI[st.reveal.picks[opp?.id]]}</span><div>{opp?.name}</div></div>
+        </div>
+      )}
+      {st.phase === "pick" && !done && (
+        <div className="rps-opts">
+          {["rock", "paper", "scissors"].map((c) => (
+            <button key={c} className={`rps-btn ${iPicked ? "dim" : ""}`} disabled={iPicked}
+              onClick={() => s.emit("rps:pick", c)} aria-label={c}>
+              <span className="rps-big">{RPS_EMOJI[c]}</span>
+              <span>{c}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {done && <button className="primary" onClick={() => s.emit("rematch")}>Play again</button>}
+    </>
+  );
+}
+
+export function Memory({ room, me }) {
+  const s = getSocket();
+  const st = room.state;
+  const myTurn = st.turn === me && !st.winner && !st.lock;
+  const nameOf = (id) => room.players.find((p) => p.id === id)?.name;
+
+  const status = st.winner === "draw" ? "It's a draw!"
+    : st.winner ? (st.winner === me ? "You win!" : `${nameOf(st.winner)} wins.`)
+    : myTurn ? "Your turn — flip a card" : `${nameOf(st.turn)}'s turn`;
+
+  return (
+    <>
+      <div className="players">
+        {room.players.map((p) => (
+          <span key={p.id} className={`pill ${p.id === me ? "me" : ""}`}>{p.name}: {st.scores[p.id] || 0}</span>
+        ))}
+      </div>
+      <p className="status">{status}</p>
+      <div className="mem-grid">
+        {st.cards.map((c, i) => (
+          <button
+            key={c.id}
+            className={`mem-card ${c.matched ? "matched" : ""} ${c.flipped || c.matched ? "up" : ""}`}
+            disabled={!myTurn || c.flipped || c.matched || st.lock}
+            onClick={() => s.emit("mem:flip", i)}
+            aria-label={c.icon ? c.icon : `Card ${i + 1}`}
+          >
+            <span>{c.icon || "?"}</span>
+          </button>
+        ))}
+      </div>
+      {st.winner && <button className="primary" onClick={() => s.emit("rematch")}>Play again</button>}
+    </>
+  );
+}
+
+function hangFigure(wrong) {
+  const head = wrong >= 1 ? "O" : " ";
+  const body = wrong >= 2 ? "|" : " ";
+  const larm = wrong >= 3 ? "/" : " ";
+  const rarm = wrong >= 4 ? "\\" : " ";
+  const lleg = wrong >= 5 ? "/" : " ";
+  const rleg = wrong >= 6 ? "\\" : " ";
+  return [
+    "  +---+",
+    "  |   |",
+    `  ${head}   |`,
+    ` ${larm}${body}${rarm}  |`,
+    ` ${lleg} ${rleg}  |`,
+    "      |",
+    " =========",
+  ].join("\n");
+}
+
+export function Hangman({ room, me }) {
+  const s = getSocket();
+  const st = room.state;
+  const isGuesser = st.guesser === me;
+  const myTurn = st.turn === me && !st.winner;
+  const nameOf = (id) => room.players.find((p) => p.id === id)?.name;
+  const alphabet = "abcdefghijklmnopqrstuvwxyz".split("");
+
+  const status = st.winner
+    ? (st.winner === me ? "You win!" : `${nameOf(st.winner)} wins.`)
+    : isGuesser ? (myTurn ? "Guess a letter" : "…")
+    : `${nameOf(st.guesser)} is guessing`;
+
+  return (
+    <>
+      <p className="status">{status}</p>
+      <pre className="hang-figure" aria-hidden>{hangFigure(st.wrong || 0)}</pre>
+      <p className="hang-word">{st.masked?.split("").join(" ") || ""}</p>
+      {st.winner && st.reveal && <p className="meta">The word was <b>{st.reveal}</b></p>}
+      <p className="meta">Wrong: {st.wrong}/{st.maxWrong}</p>
+      <div className="hang-keys">
+        {alphabet.map((ch) => {
+          const used = st.guessed?.includes(ch);
+          return (
+            <button
+              key={ch}
+              className={`hang-key ${used ? "used" : ""}`}
+              disabled={!myTurn || used || !!st.winner}
+              onClick={() => s.emit("hang:guess", ch)}
+            >
+              {ch}
+            </button>
+          );
+        })}
+      </div>
+      {st.winner && <button className="primary" onClick={() => s.emit("rematch")}>Play again</button>}
+    </>
+  );
+}
