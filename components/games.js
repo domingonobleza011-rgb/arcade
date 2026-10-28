@@ -330,10 +330,23 @@ export function Shooter({ me }) {
     };
   }, [s, me]);
 
+  const setDir = (k, v) => { if (inp.current[k] !== v) { inp.current[k] = v; dirty.current = true; } };
+  const setFire = (v) => { inp.current.fire = v; dirty.current = true; };
+
   return (
-    <div style={{ width: "100%" }}>
-      <p className="meta">Move with WASD or arrows. Aim with the mouse and hold to shoot. First to 10 frags wins.</p>
+    <div className="arena-wrap">
+      <p className="meta">Move with WASD / arrows or the pad. Aim with mouse / finger and hold to shoot. First to 10 frags wins.</p>
+      <p className="landscape-hint">Tip: rotate to landscape for a bigger arena.</p>
       <canvas ref={ref} className="arena" width={800} height={500} />
+      <div className="mctl">
+        <div className="dpad">
+          <button className="u" onPointerDown={(e) => { e.preventDefault(); setDir("u", 1); }} onPointerUp={() => setDir("u", 0)} onPointerLeave={() => setDir("u", 0)} aria-label="Up">▲</button>
+          <button onPointerDown={(e) => { e.preventDefault(); setDir("l", 1); }} onPointerUp={() => setDir("l", 0)} onPointerLeave={() => setDir("l", 0)} aria-label="Left">◀</button>
+          <button onPointerDown={(e) => { e.preventDefault(); setDir("d", 1); }} onPointerUp={() => setDir("d", 0)} onPointerLeave={() => setDir("d", 0)} aria-label="Down">▼</button>
+          <button onPointerDown={(e) => { e.preventDefault(); setDir("r", 1); }} onPointerUp={() => setDir("r", 0)} onPointerLeave={() => setDir("r", 0)} aria-label="Right">▶</button>
+        </div>
+        <button className="fire-btn" onPointerDown={(e) => { e.preventDefault(); setFire(1); }} onPointerUp={() => setFire(0)} onPointerLeave={() => setFire(0)} aria-label="Fire">🔥</button>
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { getSocket } from "../lib/socket";
 import { TicTacToe, Quiz, Draw, Shooter, Pictionary, Connect4, Checkers, RPS, Memory, Hangman } from "./games";
 import { Battleship, DotsBoxes, Reversi, Gomoku, Snake, Pong, Tanks, Scramble, MathRace, QuickDraw } from "./games2";
+import { Chess, SnakesLadders, PixelFighter, MazeChase, PongShowdown, MiniRacing } from "./games3";
 import { TITLES, META } from "./registry";
 import MediaControls from "./MediaControls";
 
@@ -46,6 +47,7 @@ export default function Room({ room, me, onLeave }) {
     checkers: Checkers, rps: RPS, memory: Memory, hangman: Hangman,
     battleship: Battleship, dots: DotsBoxes, reversi: Reversi, gomoku: Gomoku, snake: Snake, pong: Pong,
     tanks: Tanks, scramble: Scramble, mathrace: MathRace, quickdraw: QuickDraw,
+    chess: Chess, snakesladders: SnakesLadders, fighter: PixelFighter, maze: MazeChase, pongshow: PongShowdown, racing: MiniRacing,
   }[room.game];
   const isChat = room.game === "chat";
 

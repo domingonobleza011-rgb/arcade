@@ -447,6 +447,446 @@ module.exports = function createExtra({ io, sys, push }) {
     done: (r) => !!r.state.winner,
   };
 
+
+  // =====================================================================
+  // CHESS
+  // =====================================================================
+  const CH_PCS = { K: "♔", Q: "♕", R: "♖", B: "♗", N: "♘", P: "♙", k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" };
+  function chInit() {
+    return [
+      ["r","n","b","q","k","b","n","r"],
+      ["p","p","p","p","p","p","p","p"],
+      [null,null,null,null,null,null,null,null],
+      [null,null,null,null,null,null,null,null],
+      [null,null,null,null,null,null,null,null],
+      [null,null,null,null,null,null,null,null],
+      ["P","P","P","P","P","P","P","P"],
+      ["R","N","B","Q","K","B","N","R"],
+    ];
+  }
+  function chSide(pc) { return pc ? (pc === pc.toUpperCase() ? "w" : "b") : null; }
+  function chClone(b) { return b.map((r) => r.slice()); }
+  function chFindKing(b, side) {
+    const k = side === "w" ? "K" : "k";
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) if (b[y][x] === k) return [y, x];
+    return null;
+  }
+  function chAttacked(b, y, x, bySide) {
+    const enemy = bySide === "w";
+    const dirs = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+    // knights
+    for (const [dy, dx] of [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]) {
+      const ny = y + dy, nx = x + dx;
+      if (ny < 0 || nx < 0 || ny > 7 || nx > 7) continue;
+      const p = b[ny][nx];
+      if (p && chSide(p) === bySide && p.toLowerCase() === "n") return true;
+    }
+    // king
+    for (const [dy, dx] of dirs) {
+      const ny = y + dy, nx = x + dx;
+      if (ny < 0 || nx < 0 || ny > 7 || nx > 7) continue;
+      const p = b[ny][nx];
+      if (p && chSide(p) === bySide && p.toLowerCase() === "k") return true;
+    }
+    // pawns
+    const pdir = bySide === "w" ? -1 : 1;
+    for (const dx of [-1, 1]) {
+      const ny = y + pdir, nx = x + dx;
+      if (ny < 0 || nx < 0 || ny > 7 || nx > 7) continue;
+      const p = b[ny][nx];
+      if (p && chSide(p) === bySide && p.toLowerCase() === "p") return true;
+    }
+    // sliding
+    for (const [dy, dx] of dirs) {
+      for (let i = 1; i < 8; i++) {
+        const ny = y + dy * i, nx = x + dx * i;
+        if (ny < 0 || nx < 0 || ny > 7 || nx > 7) break;
+        const p = b[ny][nx];
+        if (!p) continue;
+        if (chSide(p) !== bySide) break;
+        const t = p.toLowerCase();
+        const diag = dy !== 0 && dx !== 0;
+        const orth = dy === 0 || dx === 0;
+        if (t === "q") return true;
+        if (t === "b" && diag) return true;
+        if (t === "r" && orth) return true;
+        break;
+      }
+    }
+    return false;
+  }
+  function chInCheck(b, side) {
+    const k = chFindKing(b, side);
+    if (!k) return true;
+    return chAttacked(b, k[0], k[1], side === "w" ? "b" : "w");
+  }
+  function chMoves(b, y, x) {
+    const pc = b[y][x];
+    if (!pc) return [];
+    const side = chSide(pc);
+    const t = pc.toLowerCase();
+    const out = [];
+    const add = (ny, nx) => {
+      if (ny < 0 || nx < 0 || ny > 7 || nx > 7) return false;
+      const tgt = b[ny][nx];
+      if (tgt && chSide(tgt) === side) return false;
+      out.push([ny, nx]);
+      return !tgt;
+    };
+    if (t === "p") {
+      const dir = side === "w" ? -1 : 1;
+      const start = side === "w" ? 6 : 1;
+      if (!b[y + dir]?.[x]) {
+        out.push([y + dir, x]);
+        if (y === start && !b[y + dir * 2]?.[x]) out.push([y + dir * 2, x]);
+      }
+      for (const dx of [-1, 1]) {
+        const ny = y + dir, nx = x + dx;
+        if (ny < 0 || nx < 0 || ny > 7 || nx > 7) continue;
+        if (b[ny][nx] && chSide(b[ny][nx]) !== side) out.push([ny, nx]);
+      }
+    } else if (t === "n") {
+      for (const [dy, dx] of [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]) add(y + dy, x + dx);
+    } else if (t === "k") {
+      for (const [dy, dx] of [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]]) add(y + dy, x + dx);
+    } else {
+      const dirs = t === "b" ? [[-1,-1],[-1,1],[1,-1],[1,1]]
+        : t === "r" ? [[-1,0],[1,0],[0,-1],[0,1]]
+        : [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+      for (const [dy, dx] of dirs) {
+        for (let i = 1; i < 8; i++) if (!add(y + dy * i, x + dx * i)) break;
+      }
+    }
+    // filter moves that leave own king in check
+    return out.filter(([ny, nx]) => {
+      const nb = chClone(b);
+      nb[ny][nx] = nb[y][x];
+      nb[y][x] = null;
+      // promote for check test
+      if (nb[ny][nx].toLowerCase() === "p" && (ny === 0 || ny === 7)) nb[ny][nx] = side === "w" ? "Q" : "q";
+      return !chInCheck(nb, side);
+    });
+  }
+  function chHasMoves(b, side) {
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+      if (chSide(b[y][x]) === side && chMoves(b, y, x).length) return true;
+    }
+    return false;
+  }
+  games.chess = {
+    start(r) {
+      const [a, b] = r.players;
+      r.state = { board: chInit(), turn: "w", ids: { w: a.id, b: b.id }, winner: null, last: null, check: false };
+    },
+    view: (r) => ({ ...r.state }),
+    done: (r) => !!r.state.winner,
+  };
+
+  // =====================================================================
+  // SNAKES AND LADDERS
+  // =====================================================================
+  const SNL_SNAKES = { 16: 6, 47: 26, 49: 11, 56: 53, 62: 19, 64: 60, 87: 24, 93: 73, 95: 75, 98: 78 };
+  const SNL_LADDERS = { 1: 38, 4: 14, 9: 31, 21: 42, 28: 84, 36: 44, 51: 67, 71: 91, 80: 100 };
+  games.snakesladders = {
+    start(r) {
+      const [a, b] = r.players;
+      r.state = {
+        pos: { [a.id]: 0, [b.id]: 0 },
+        turn: a.id, winner: null, last: null, rolling: false,
+      };
+    },
+    view: (r) => ({ ...r.state, snakes: SNL_SNAKES, ladders: SNL_LADDERS }),
+    done: (r) => !!r.state.winner,
+  };
+
+  // =====================================================================
+  // PIXEL FIGHTER (realtime side-view)
+  // =====================================================================
+  const FG = { W: 800, H: 360, FLOOR: 300 };
+  function fgTick(r) {
+    const s = r.state;
+    if (!s || s.winner) return;
+    s.cool = Math.max(0, (s.cool || 0) - 1);
+    for (const f of s.f) {
+      if (f.hit > 0) f.hit--;
+      if (f.atk > 0) f.atk--;
+      const inp = f.inp || {};
+      const facing = f.id === s.f[0].id ? 1 : -1;
+      // opponent relative
+      const opp = s.f.find((q) => q.id !== f.id);
+      if (opp && f.x < opp.x) f.face = 1; else f.face = -1;
+      if (f.hit > 0) continue;
+      let dx = 0;
+      if (inp.l) dx -= 1;
+      if (inp.r) dx += 1;
+      f.x = clamp(f.x + dx * 4.2, 40, FG.W - 40);
+      // gravity / jump
+      if (inp.u && f.y >= FG.FLOOR) f.vy = -11;
+      f.vy = (f.vy || 0) + 0.55;
+      f.y = Math.min(FG.FLOOR, f.y + f.vy);
+      if (f.y >= FG.FLOOR) { f.y = FG.FLOOR; f.vy = 0; }
+      if (inp.punch && f.atk === 0 && f.cool === 0) {
+        f.atk = 12; f.cool = 18; f.kind = "p";
+      } else if (inp.kick && f.atk === 0 && f.cool === 0) {
+        f.atk = 16; f.cool = 26; f.kind = "k";
+      }
+      if (f.atk === 8 || f.atk === 10) {
+        // active frames
+        const range = f.kind === "k" ? 70 : 52;
+        const dmg = f.kind === "k" ? 14 : 9;
+        if (opp && Math.abs(f.x - opp.x) < range && Math.abs(f.y - opp.y) < 50 && opp.hit === 0) {
+          opp.hp = Math.max(0, opp.hp - dmg);
+          opp.hit = 14;
+          opp.x = clamp(opp.x + f.face * 18, 40, FG.W - 40);
+          if (opp.hp <= 0) {
+            f.wins = (f.wins || 0) + 1;
+            if (f.wins >= 2) s.winner = f.id;
+            else {
+              s.round = (s.round || 1) + 1;
+              s.f.forEach((q, i) => { q.hp = 100; q.x = i ? 620 : 180; q.y = FG.FLOOR; q.hit = 0; q.atk = 0; });
+            }
+          }
+        }
+      }
+      f.cool = Math.max(0, (f.cool || 0) - 1);
+    }
+    // separate overlap
+    const [a, b] = s.f;
+    if (Math.abs(a.x - b.x) < 36) {
+      const mid = (a.x + b.x) / 2;
+      a.x = mid - 18; b.x = mid + 18;
+    }
+    emitRT(r);
+  }
+  games.fighter = {
+    start(r) {
+      const [a, b] = r.players;
+      r.state = {
+        f: [
+          { id: a.id, x: 180, y: FG.FLOOR, hp: 100, face: 1, atk: 0, cool: 0, hit: 0, wins: 0, inp: {} },
+          { id: b.id, x: 620, y: FG.FLOOR, hp: 100, face: -1, atk: 0, cool: 0, hit: 0, wins: 0, inp: {} },
+        ],
+        round: 1, target: 2, winner: null,
+      };
+      if (r._fgTick) clearInterval(r._fgTick);
+      r._fgTick = setInterval(() => fgTick(r), 33);
+    },
+    view: (r) => ({ ids: r.state.f.map((f) => f.id), winner: r.state.winner, round: r.state.round, target: r.state.target }),
+    snap: (r) => {
+      const s = r.state;
+      return {
+        f: s.f.map((f) => [f.id, Math.round(f.x), Math.round(f.y), f.hp, f.face, f.atk, f.kind || "", f.hit, f.wins || 0]),
+        round: s.round, target: s.target, winner: s.winner,
+      };
+    },
+    done: (r) => !!r.state.winner,
+  };
+
+  // =====================================================================
+  // MAZE CHASE
+  // =====================================================================
+  const MZ = { W: 21, H: 15, C: 28 };
+  function mazeGen() {
+    // simple open maze with walls on odd cells pattern + borders
+    const g = Array.from({ length: MZ.H }, (_, y) =>
+      Array.from({ length: MZ.W }, (_, x) => (x === 0 || y === 0 || x === MZ.W - 1 || y === MZ.H - 1 || (x % 2 === 0 && y % 2 === 0)) ? 1 : 0)
+    );
+    // punch some corridors
+    for (let i = 0; i < 40; i++) {
+      const x = 1 + rnd(MZ.W - 2), y = 1 + rnd(MZ.H - 2);
+      g[y][x] = 0;
+    }
+    return g;
+  }
+  function mazeTick(r) {
+    const s = r.state;
+    if (!s || s.winner) return;
+    for (const p of s.p) {
+      const inp = p.inp || {};
+      let nx = p.x, ny = p.y;
+      if (inp.u) ny -= 1;
+      else if (inp.d) ny += 1;
+      else if (inp.l) nx -= 1;
+      else if (inp.r) nx += 1;
+      if (nx >= 0 && ny >= 0 && nx < MZ.W && ny < MZ.H && !s.grid[ny][nx]) {
+        p.x = nx; p.y = ny;
+      }
+      p.inp = {}; // step-based
+    }
+    const [a, b] = s.p;
+    if (a.x === b.x && a.y === b.y) {
+      // hunter catches
+      const hunter = s.p.find((p) => p.role === "h");
+      const prey = s.p.find((p) => p.role === "p");
+      hunter.score = (hunter.score || 0) + 1;
+      if (hunter.score >= 3) s.winner = hunter.id;
+      else {
+        // swap roles and reset positions
+        for (const p of s.p) {
+          p.role = p.role === "h" ? "p" : "h";
+          p.x = p.role === "h" ? 1 : MZ.W - 2;
+          p.y = p.role === "h" ? 1 : MZ.H - 2;
+        }
+        s.round = (s.round || 1) + 1;
+      }
+    }
+    emitRT(r);
+  }
+  games.maze = {
+    start(r) {
+      const [a, b] = r.players;
+      const grid = mazeGen();
+      r.state = {
+        grid,
+        p: [
+          { id: a.id, x: 1, y: 1, role: "h", score: 0, inp: {} },
+          { id: b.id, x: MZ.W - 2, y: MZ.H - 2, role: "p", score: 0, inp: {} },
+        ],
+        round: 1, winner: null,
+      };
+      if (r._mzTick) clearInterval(r._mzTick);
+      r._mzTick = setInterval(() => mazeTick(r), 120);
+    },
+    view: (r) => ({ ids: r.state.p.map((p) => p.id), winner: r.state.winner, round: r.state.round }),
+    snap: (r) => {
+      const s = r.state;
+      return {
+        grid: s.grid,
+        p: s.p.map((p) => [p.id, p.x, p.y, p.role, p.score || 0]),
+        round: s.round, winner: s.winner, w: MZ.W, h: MZ.H,
+      };
+    },
+    done: (r) => !!r.state.winner,
+  };
+
+  // =====================================================================
+  // PONG SHOWDOWN (faster, first to 11)
+  // =====================================================================
+  const PS = { W: 800, H: 500, PH: 100, PW: 12, BS: 9, WIN: 11 };
+  function psTick(r) {
+    const s = r.state;
+    if (!s || s.winner) return;
+    // move paddles toward targets
+    for (const p of s.pad) p.y += (p.t - p.y) * 0.35;
+    s.ball.x += s.ball.vx;
+    s.ball.y += s.ball.vy;
+    if (s.ball.y < 8 || s.ball.y > PS.H - 8) { s.ball.vy *= -1; s.ball.y = clamp(s.ball.y, 8, PS.H - 8); }
+    for (let i = 0; i < 2; i++) {
+      const p = s.pad[i];
+      const px = i ? PS.W - 30 - PS.PW : 30;
+      if (s.ball.x > px - 6 && s.ball.x < px + PS.PW + 6 && s.ball.y > p.y && s.ball.y < p.y + PS.PH) {
+        s.ball.vx = (i ? -1 : 1) * Math.min(16, Math.abs(s.ball.vx) * 1.06 + 0.3);
+        const rel = (s.ball.y - (p.y + PS.PH / 2)) / (PS.PH / 2);
+        s.ball.vy = rel * 8;
+        s.ball.x = i ? px - 6 : px + PS.PW + 6;
+      }
+    }
+    if (s.ball.x < 0) {
+      s.pad[1].score++;
+      if (s.pad[1].score >= PS.WIN) s.winner = s.pad[1].id;
+      s.ball = { x: 400, y: 250, vx: 6, vy: (Math.random() * 4 - 2) };
+    } else if (s.ball.x > PS.W) {
+      s.pad[0].score++;
+      if (s.pad[0].score >= PS.WIN) s.winner = s.pad[0].id;
+      s.ball = { x: 400, y: 250, vx: -6, vy: (Math.random() * 4 - 2) };
+    }
+    emitRT(r);
+  }
+  games.pongshow = {
+    start(r) {
+      const [a, b] = r.players;
+      r.state = {
+        pad: [
+          { id: a.id, y: 200, t: 200, score: 0 },
+          { id: b.id, y: 200, t: 200, score: 0 },
+        ],
+        ball: { x: 400, y: 250, vx: 6, vy: 2 },
+        winner: null,
+      };
+      if (r._psTick) clearInterval(r._psTick);
+      r._psTick = setInterval(() => psTick(r), 16);
+    },
+    view: (r) => ({ ids: r.state.pad.map((p) => p.id), winner: r.state.winner, target: PS.WIN }),
+    snap: (r) => {
+      const s = r.state;
+      return {
+        p: s.pad.map((p) => [Math.round(p.y), p.score]),
+        b: [Math.round(s.ball.x), Math.round(s.ball.y), +s.ball.vx.toFixed(2), +s.ball.vy.toFixed(2)],
+        winner: s.winner,
+      };
+    },
+    done: (r) => !!r.state.winner,
+  };
+
+  // =====================================================================
+  // MINI RACING
+  // =====================================================================
+  const RC = { W: 800, H: 500 };
+  function raceTrackDist(x, y) {
+    // oval track center 400,250 radii 280x160
+    const dx = (x - 400) / 280, dy = (y - 250) / 160;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+  function racingTick(r) {
+    const s = r.state;
+    if (!s || s.winner) return;
+    for (const c of s.cars) {
+      const inp = c.inp || {};
+      if (inp.l) c.a -= 0.07;
+      if (inp.r) c.a += 0.07;
+      if (inp.f) c.spd = Math.min(6.5, c.spd + 0.18);
+      else if (inp.b) c.spd = Math.max(-2.5, c.spd - 0.2);
+      else c.spd *= 0.98;
+      c.x += Math.cos(c.a) * c.spd;
+      c.y += Math.sin(c.a) * c.spd;
+      // soft walls for track
+      const d = raceTrackDist(c.x, c.y);
+      if (d < 0.45 || d > 1.05) {
+        c.spd *= 0.7;
+        // push back toward ring
+        const ang = Math.atan2(c.y - 250, c.x - 400);
+        const target = d < 0.45 ? 0.5 : 1.0;
+        c.x = 400 + Math.cos(ang) * 280 * target;
+        c.y = 250 + Math.sin(ang) * 160 * target;
+      }
+      // lap detection via checkpoint angle
+      let ang = Math.atan2(c.y - 250, c.x - 400);
+      if (ang < 0) ang += Math.PI * 2;
+      if (c.prevAng !== undefined) {
+        // crossing finish (angle near 0 from high)
+        if (c.prevAng > 5.5 && ang < 0.8 && c.spd > 0) {
+          c.laps = (c.laps || 0) + 1;
+          if (c.laps >= 3) s.winner = c.id;
+        }
+      }
+      c.prevAng = ang;
+    }
+    emitRT(r);
+  }
+  games.racing = {
+    start(r) {
+      const [a, b] = r.players;
+      r.state = {
+        cars: [
+          { id: a.id, x: 400 + 280, y: 250, a: Math.PI / 2, spd: 0, laps: 0, inp: {} },
+          { id: b.id, x: 400 + 250, y: 250, a: Math.PI / 2, spd: 0, laps: 0, inp: {} },
+        ],
+        winner: null,
+      };
+      if (r._rcTick) clearInterval(r._rcTick);
+      r._rcTick = setInterval(() => racingTick(r), 33);
+    },
+    view: (r) => ({ ids: r.state.cars.map((c) => c.id), winner: r.state.winner }),
+    snap: (r) => {
+      const s = r.state;
+      return {
+        c: s.cars.map((c) => [c.id, Math.round(c.x), Math.round(c.y), +c.a.toFixed(2), c.laps || 0, +c.spd.toFixed(2)]),
+        winner: s.winner,
+      };
+    },
+    done: (r) => !!r.state.winner,
+  };
+
   // =====================================================================
   // socket events
   // =====================================================================
@@ -594,7 +1034,153 @@ module.exports = function createExtra({ io, sys, push }) {
       if (!o) return;
       if (s.phase === "wait") qdEnd(r, o.id, { foul: socket.id });
       else if (s.phase === "go") qdEnd(r, socket.id, { ms: Date.now() - s.goAt });
+  
+    socket.on("ch:move", (d = {}) => {
+      const r = get("chess");
+      if (!r || !isInt(d.fy) || !isInt(d.fx) || !isInt(d.ty) || !isInt(d.tx)) return;
+      const s = r.state;
+      if (s.winner) return;
+      const side = s.turn;
+      if (s.ids[side] !== socket.id) return;
+      const moves = chMoves(s.board, d.fy, d.fx);
+      if (!moves.some(([y, x]) => y === d.ty && x === d.tx)) return;
+      const pc = s.board[d.fy][d.fx];
+      s.board[d.ty][d.tx] = pc;
+      s.board[d.fy][d.fx] = null;
+      if (pc.toLowerCase() === "p" && (d.ty === 0 || d.ty === 7)) s.board[d.ty][d.tx] = side === "w" ? "Q" : "q";
+      s.last = [d.fy, d.fx, d.ty, d.tx];
+      const opp = side === "w" ? "b" : "w";
+      s.turn = opp;
+      s.check = chInCheck(s.board, opp);
+      if (!chHasMoves(s.board, opp)) {
+        s.winner = s.check ? s.ids[side] : "draw";
+      }
+      push(r);
     });
+
+    socket.on("snl:roll", () => {
+      const r = get("snakesladders");
+      if (!r) return;
+      const s = r.state;
+      if (s.winner || s.turn !== socket.id || s.rolling) return;
+      s.rolling = true;
+      const die = 1 + rnd(6);
+      let pos = s.pos[socket.id] + die;
+      if (pos > 100) pos = s.pos[socket.id]; // bounce rule simplified: stay if overshoot
+      else {
+        if (SNL_LADDERS[pos]) pos = SNL_LADDERS[pos];
+        if (SNL_SNAKES[pos]) pos = SNL_SNAKES[pos];
+      }
+      s.pos[socket.id] = pos;
+      s.last = { by: socket.id, die, pos };
+      if (pos >= 100) s.winner = socket.id;
+      else if (die !== 6) s.turn = other(r, socket.id).id; // extra turn on 6
+      s.rolling = false;
+      push(r);
+    });
+
+    socket.on("fg:input", (d) => {
+      const r = get("fighter");
+      if (!r || !d) return;
+      const f = r.state.f.find((q) => q.id === socket.id);
+      if (f) f.inp = { l: !!d.l, r: !!d.r, u: !!d.u, punch: !!d.punch, kick: !!d.kick };
+    });
+
+    socket.on("mz:dir", (d) => {
+      const r = get("maze");
+      if (!r || !d) return;
+      const p = r.state.p.find((q) => q.id === socket.id);
+      if (p) p.inp = { u: d === "u", d: d === "d", l: d === "l", r: d === "r" };
+    });
+
+    socket.on("ps:y", (y) => {
+      const r = get("pongshow");
+      if (!r || !Number.isFinite(y)) return;
+      const p = r.state.pad.find((q) => q.id === socket.id);
+      if (p) p.t = clamp(y - PS.PH / 2, 0, PS.H - PS.PH);
+    });
+
+    socket.on("rc:input", (d) => {
+      const r = get("racing");
+      if (!r || !d) return;
+      const c = r.state.cars.find((q) => q.id === socket.id);
+      if (c) c.inp = { f: !!d.f, b: !!d.b, l: !!d.l, r: !!d.r };
+    });
+
+  });
+
+    socket.on("ch:move", (d = {}) => {
+      const r = get("chess");
+      if (!r || !isInt(d.fy) || !isInt(d.fx) || !isInt(d.ty) || !isInt(d.tx)) return;
+      const s = r.state;
+      if (s.winner) return;
+      const side = s.turn;
+      if (s.ids[side] !== socket.id) return;
+      const moves = chMoves(s.board, d.fy, d.fx);
+      if (!moves.some(([y, x]) => y === d.ty && x === d.tx)) return;
+      const pc = s.board[d.fy][d.fx];
+      s.board[d.ty][d.tx] = pc;
+      s.board[d.fy][d.fx] = null;
+      if (pc.toLowerCase() === "p" && (d.ty === 0 || d.ty === 7)) s.board[d.ty][d.tx] = side === "w" ? "Q" : "q";
+      s.last = [d.fy, d.fx, d.ty, d.tx];
+      const opp = side === "w" ? "b" : "w";
+      s.turn = opp;
+      s.check = chInCheck(s.board, opp);
+      if (!chHasMoves(s.board, opp)) {
+        s.winner = s.check ? s.ids[side] : "draw";
+      }
+      push(r);
+    });
+
+    socket.on("snl:roll", () => {
+      const r = get("snakesladders");
+      if (!r) return;
+      const s = r.state;
+      if (s.winner || s.turn !== socket.id || s.rolling) return;
+      s.rolling = true;
+      const die = 1 + rnd(6);
+      let pos = s.pos[socket.id] + die;
+      if (pos > 100) pos = s.pos[socket.id]; // bounce rule simplified: stay if overshoot
+      else {
+        if (SNL_LADDERS[pos]) pos = SNL_LADDERS[pos];
+        if (SNL_SNAKES[pos]) pos = SNL_SNAKES[pos];
+      }
+      s.pos[socket.id] = pos;
+      s.last = { by: socket.id, die, pos };
+      if (pos >= 100) s.winner = socket.id;
+      else if (die !== 6) s.turn = other(r, socket.id).id; // extra turn on 6
+      s.rolling = false;
+      push(r);
+    });
+
+    socket.on("fg:input", (d) => {
+      const r = get("fighter");
+      if (!r || !d) return;
+      const f = r.state.f.find((q) => q.id === socket.id);
+      if (f) f.inp = { l: !!d.l, r: !!d.r, u: !!d.u, punch: !!d.punch, kick: !!d.kick };
+    });
+
+    socket.on("mz:dir", (d) => {
+      const r = get("maze");
+      if (!r || !d) return;
+      const p = r.state.p.find((q) => q.id === socket.id);
+      if (p) p.inp = { u: d === "u", d: d === "d", l: d === "l", r: d === "r" };
+    });
+
+    socket.on("ps:y", (y) => {
+      const r = get("pongshow");
+      if (!r || !Number.isFinite(y)) return;
+      const p = r.state.pad.find((q) => q.id === socket.id);
+      if (p) p.t = clamp(y - PS.PH / 2, 0, PS.H - PS.PH);
+    });
+
+    socket.on("rc:input", (d) => {
+      const r = get("racing");
+      if (!r || !d) return;
+      const c = r.state.cars.find((q) => q.id === socket.id);
+      if (c) c.inp = { f: !!d.f, b: !!d.b, l: !!d.l, r: !!d.r };
+    });
+
   }
 
   return { games, register, perViewer: new Set(["battleship"]), view: (r, v) => games[r.game].view(r, v) };

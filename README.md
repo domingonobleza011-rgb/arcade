@@ -3,7 +3,7 @@
 Realtime multiplayer games with room codes, random matchmaking, live chat and emotes.
 Next.js + a custom Socket.IO server.
 
-**Games (21):** Tic-tac-toe · Connect Four · Checkers · Reversi · Gomoku · Battleship · Dots & Boxes · Snake Duel · Neon Pong · Tank Battle · Arena shooter · Quick Draw · Rock Paper Scissors · Memory Match · Hangman · Quiz battle · Word Scramble · Math Race · Drawing board · Draw & guess (2–8 players) · Chat rooms
+**Games (27):** Tic-tac-toe · Connect Four · Checkers · Reversi · Gomoku · Battleship · Dots & Boxes · Chess · Snakes & Ladders · Snake Duel · Neon Pong · Pong Showdown · Tank Battle · Arena shooter · Pixel Fighter · Maze Chase · Mini Racing · Quick Draw · Rock Paper Scissors · Memory Match · Hangman · Quiz battle · Word Scramble · Math Race · Drawing board · Draw & guess (2–8 players) · Chat rooms
 
 ```bash
 npm install

@@ -457,6 +457,7 @@ export function Tanks({ room, me }) {
   const st = room.state;
   const ref = useRef(null);
   const rt = useRT();
+  const mob = useRef({ f: 0, b: 0, l: 0, r: 0, fire: 0 });
 
   useEffect(() => {
     const cv = ref.current, g = cv.getContext("2d");
@@ -477,16 +478,26 @@ export function Tanks({ room, me }) {
       mouse.x = ((e.clientX - r.left) / r.width) * 800; mouse.y = ((e.clientY - r.top) / r.height) * 500;
     };
     const md = () => { inp.fire = 1; dirty = true; };
-    const mu = () => { if (inp.fire) { inp.fire = 0; dirty = true; } };
+    const mu = () => { if (inp.fire && !mob.current.fire) { inp.fire = 0; dirty = true; } };
     window.addEventListener("keydown", kd); window.addEventListener("keyup", ku); window.addEventListener("pointerup", mu);
     cv.addEventListener("pointermove", mm); cv.addEventListener("pointerdown", md);
     const send = setInterval(() => {
+      const m = mob.current;
+      for (const k of ["f", "b", "l", "r", "fire"]) {
+        if (m[k] && !inp[k]) { inp[k] = 1; dirty = true; }
+        else if (!m[k] && inp[k] && k !== "fire") { /* keyboard may still hold */ }
+        if (m.fire) inp.fire = 1;
+      }
+      // apply mobile drive if held
+      if (m.f || m.b || m.l || m.r) {
+        inp.f = m.f; inp.b = m.b; inp.l = m.l; inp.r = m.r; dirty = true;
+      }
       const d = rt.current, mt = d && d.t.find((t) => t[0] === me);
       if (mt) {
         const a = Math.atan2(mouse.y - mt[2], mouse.x - mt[1]);
         if (Math.abs(a - inp.aim) > 0.02) { inp.aim = a; dirty = true; }
       }
-      if (dirty) { dirty = false; s.emit("tk:input", inp); }
+      if (dirty) { dirty = false; s.emit("tk:input", { ...inp, fire: inp.fire || m.fire }); }
     }, 33);
 
     let raf;
@@ -541,11 +552,22 @@ export function Tanks({ room, me }) {
   }, [s, me, room.players, rt]);
 
   const [txt, cls] = st.winner ? banner(room, me, st.winner, null) : ["Outgun your rival — shells ricochet twice!", ""];
+  const hold = (k, v) => () => { mob.current[k] = v; };
   return (
     <div className="arena-wrap">
       <p className={`status ${cls}`} style={{ marginBottom: 10 }}>{txt}</p>
+      <p className="landscape-hint">Tip: rotate to landscape for a bigger arena.</p>
       <canvas ref={ref} className="arena" width={800} height={500} />
-      <p className="meta" style={{ marginTop: 8 }}><kbd>W</kbd><kbd>S</kbd> drive · <kbd>A</kbd><kbd>D</kbd> rotate hull · mouse aims the turret · click or <kbd>Space</kbd> fires. Desktop only.</p>
+      <p className="meta" style={{ marginTop: 8 }}><kbd>W</kbd><kbd>S</kbd> drive · <kbd>A</kbd><kbd>D</kbd> rotate · mouse aims · click / <kbd>Space</kbd> / Fire button shoots.</p>
+      <div className="mctl">
+        <div className="dpad">
+          <button className="u" onPointerDown={hold("f", 1)} onPointerUp={hold("f", 0)} onPointerLeave={hold("f", 0)} aria-label="Forward">▲</button>
+          <button onPointerDown={hold("l", 1)} onPointerUp={hold("l", 0)} onPointerLeave={hold("l", 0)} aria-label="Left">◀</button>
+          <button onPointerDown={hold("b", 1)} onPointerUp={hold("b", 0)} onPointerLeave={hold("b", 0)} aria-label="Back">▼</button>
+          <button onPointerDown={hold("r", 1)} onPointerUp={hold("r", 0)} onPointerLeave={hold("r", 0)} aria-label="Right">▶</button>
+        </div>
+        <button className="fire-btn" onPointerDown={hold("fire", 1)} onPointerUp={hold("fire", 0)} onPointerLeave={hold("fire", 0)} aria-label="Fire">🔥</button>
+      </div>
       <div style={{ textAlign: "center", marginTop: 10 }}><Again show={!!st.winner} /></div>
     </div>
   );
