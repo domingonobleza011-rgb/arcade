@@ -767,7 +767,7 @@ module.exports = function createExtra({ io, sys, push }) {
     const s = r.state;
     if (!s || s.winner) return;
     // move paddles toward targets
-    for (const p of s.pad) p.y += (p.t - p.y) * 0.35;
+    for (const p of s.pad) p.y += (p.t - p.y) * 0.92;
     s.ball.x += s.ball.vx;
     s.ball.y += s.ball.vy;
     if (s.ball.y < 8 || s.ball.y > PS.H - 8) { s.ball.vy *= -1; s.ball.y = clamp(s.ball.y, 8, PS.H - 8); }
@@ -1066,15 +1066,17 @@ module.exports = function createExtra({ io, sys, push }) {
       s.rolling = true;
       const die = 1 + rnd(6);
       let pos = s.pos[socket.id] + die;
-      if (pos > 100) pos = s.pos[socket.id]; // bounce rule simplified: stay if overshoot
-      else {
-        if (SNL_LADDERS[pos]) pos = SNL_LADDERS[pos];
-        if (SNL_SNAKES[pos]) pos = SNL_SNAKES[pos];
+      let via = null;
+      if (pos > 100) {
+        pos = s.pos[socket.id]; // must land exactly on 100
+      } else {
+        if (SNL_LADDERS[pos]) { via = "ladder"; pos = SNL_LADDERS[pos]; }
+        else if (SNL_SNAKES[pos]) { via = "snake"; pos = SNL_SNAKES[pos]; }
       }
       s.pos[socket.id] = pos;
-      s.last = { by: socket.id, die, pos };
-      if (pos >= 100) s.winner = socket.id;
-      else if (die !== 6) s.turn = other(r, socket.id).id; // extra turn on 6
+      s.last = { by: socket.id, die, pos, via };
+      if (pos === 100) s.winner = socket.id;
+      else if (die !== 6) s.turn = other(r, socket.id).id;
       s.rolling = false;
       push(r);
     });
@@ -1140,15 +1142,17 @@ module.exports = function createExtra({ io, sys, push }) {
       s.rolling = true;
       const die = 1 + rnd(6);
       let pos = s.pos[socket.id] + die;
-      if (pos > 100) pos = s.pos[socket.id]; // bounce rule simplified: stay if overshoot
-      else {
-        if (SNL_LADDERS[pos]) pos = SNL_LADDERS[pos];
-        if (SNL_SNAKES[pos]) pos = SNL_SNAKES[pos];
+      let via = null;
+      if (pos > 100) {
+        pos = s.pos[socket.id]; // must land exactly on 100
+      } else {
+        if (SNL_LADDERS[pos]) { via = "ladder"; pos = SNL_LADDERS[pos]; }
+        else if (SNL_SNAKES[pos]) { via = "snake"; pos = SNL_SNAKES[pos]; }
       }
       s.pos[socket.id] = pos;
-      s.last = { by: socket.id, die, pos };
-      if (pos >= 100) s.winner = socket.id;
-      else if (die !== 6) s.turn = other(r, socket.id).id; // extra turn on 6
+      s.last = { by: socket.id, die, pos, via };
+      if (pos === 100) s.winner = socket.id;
+      else if (die !== 6) s.turn = other(r, socket.id).id;
       s.rolling = false;
       push(r);
     });

@@ -66,7 +66,7 @@ label{display:flex;gap:10px;align-items:center}
 .players{display:flex;gap:8px;flex-wrap:wrap}
 .pill{padding:4px 12px;border:1px solid var(--line);border-radius:99px;font-size:.88rem;background:rgba(10,20,37,.6)}
 .pill.me{border-color:var(--mint);color:#bff5de}
-.stage{min-height:460px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;position:relative;overflow:hidden}
+.stage{min-height:460px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:12px;text-align:center;position:relative;overflow:auto;padding:12px 8px 20px}
 .status{font-size:1.15rem;margin:0;padding:8px 18px;border-radius:99px;background:rgba(10,20,37,.7);border:1px solid var(--line);max-width:100%}
 h2.status{border-radius:14px}
 .status.good{border-color:var(--mint);color:#c8f8e3;background:rgba(61,220,151,.12)}
@@ -272,26 +272,44 @@ canvas.arena{background:#050b16;margin-top:0;cursor:default;border:1px solid var
 }
 .landscape-hint{display:none}
 /* chess board */
-.chess{display:grid;grid-template-columns:repeat(8,1fr);width:min(100%,520px);aspect-ratio:1;border-radius:12px;overflow:hidden;box-shadow:var(--shadow);margin:0 auto;touch-action:manipulation}
-.chess .sq{aspect-ratio:1;display:grid;place-items:center;font-size:clamp(1.4rem,5.5vw,2.4rem);cursor:pointer;user-select:none;position:relative}
-.chess .sq.light{background:#e8d5b5}
+.chess-wrap{width:min(100%,min(92vw,560px));margin:0 auto}
+.chess{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));width:100%;aspect-ratio:1;border-radius:12px;overflow:hidden;box-shadow:var(--shadow);touch-action:manipulation;border:3px solid #5c4030}
+.chess .sq{aspect-ratio:1;display:grid;place-items:center;font-size:clamp(1.35rem,4.8vw,2.55rem);cursor:pointer;user-select:none;position:relative;line-height:1;padding:0;border:none}
+.chess .sq.light{background:#f0d9b5}
 .chess .sq.dark{background:#b58863}
-.chess .sq.sel{box-shadow:inset 0 0 0 3px #ffd23f}
-.chess .sq.mv{box-shadow:inset 0 0 0 3px #3ddc97}
-.chess .sq.mv::after{content:"";width:28%;height:28%;border-radius:50%;background:rgba(61,220,151,.55);position:absolute}
-.chess .sq.cap{box-shadow:inset 0 0 0 3px #ff6b6b}
-.chess .sq.last{background:#f6e58d}
+.chess .sq.sel{box-shadow:inset 0 0 0 3px #ffd23f;background:#cdd26a}
+.chess .sq.mv::after{content:"";width:26%;height:26%;border-radius:50%;background:rgba(20,80,40,.45);position:absolute}
+.chess .sq.cap{box-shadow:inset 0 0 0 3px #c0392b}
+.chess .sq.last{outline:3px solid rgba(255,210,63,.7);outline-offset:-3px}
+.chess .pc-w{color:#fffef5;filter:drop-shadow(0 1px 0 #333) drop-shadow(1px 1px 0 #000);text-shadow:0 0 1px #000}
+.chess .pc-b{color:#1a1a1a;filter:drop-shadow(0 1px 0 #fff) drop-shadow(0 0 1px #fff)}
 /* snakes and ladders */
-.snl{width:min(100%,480px);aspect-ratio:1;margin:0 auto;display:grid;grid-template-columns:repeat(10,1fr);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);position:relative}
-.snl .cell{aspect-ratio:1;display:grid;place-items:center;font-size:clamp(.55rem,2.2vw,.75rem);font-weight:700;position:relative;border:1px solid rgba(0,0,0,.08)}
-.snl .cell.light{background:#1e3a5f}
-.snl .cell.dark{background:#152a45}
-.snl .tok{position:absolute;width:38%;height:38%;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4);z-index:2}
-.snl .tok.a{background:#ff6b6b;top:8%;left:8%}
-.snl .tok.b{background:#4cc9f0;bottom:8%;right:8%}
-.snl .tok.both-a{top:8%;left:8%}
-.snl .tok.both-b{bottom:8%;right:8%}
-.dice-btn{font-size:2rem;min-width:88px;min-height:88px;border-radius:18px}
+.snl-wrap{width:min(100%,min(94vw,520px));margin:0 auto}
+.snl{width:100%;aspect-ratio:1;display:grid;grid-template-columns:repeat(10,minmax(0,1fr));border-radius:14px;overflow:hidden;box-shadow:var(--shadow);border:3px solid #2a5080;position:relative}
+.snl .cell{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:clamp(.5rem,1.8vw,.72rem);font-weight:800;position:relative;border:1px solid rgba(255,255,255,.06);color:rgba(255,255,255,.55);line-height:1.1;padding:1px}
+.snl .cell.light{background:#245a8a}
+.snl .cell.dark{background:#1a3f66}
+.snl .cell.start{background:linear-gradient(145deg,#3ddc97,#1a8f63);color:#fff}
+.snl .cell.finish{background:linear-gradient(145deg,#ffd23f,#c9a00e);color:#3a2a00}
+.snl .cell .mark{font-size:clamp(.7rem,2.4vw,1rem);line-height:1}
+.snl .tok{position:absolute;width:42%;height:42%;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.45);z-index:3;transition:top .35s ease,left .35s ease,bottom .35s ease,right .35s ease}
+.snl .tok.a{background:#ff6b6b;top:6%;left:6%}
+.snl .tok.b{background:#4cc9f0;bottom:6%;right:6%}
+.snl .tok.both-a{top:6%;left:6%}
+.snl .tok.both-b{bottom:6%;right:6%}
+.dice-btn{font-size:2.2rem;min-width:96px;min-height:96px;border-radius:20px}
+.dice-result{font-size:2.6rem;font-weight:800;min-height:1.2em}
+/* how-to overlay */
+.howto{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(5,11,22,.82);backdrop-filter:blur(6px);padding:16px;animation:howtoIn .25s ease-out}
+@keyframes howtoIn{from{opacity:0}to{opacity:1}}
+.howto-card{background:linear-gradient(180deg,#1b2f4d,#101c31);border:1px solid var(--line);border-radius:18px;padding:22px 24px;max-width:420px;width:100%;text-align:left;box-shadow:0 20px 50px rgba(0,0,0,.45)}
+.howto-card h3{margin:0 0 10px;font-family:var(--font-display),sans-serif;font-size:1.35rem;display:flex;align-items:center;gap:8px}
+.howto-card ol{margin:0;padding-left:1.2em;color:var(--ink);line-height:1.55}
+.howto-card li{margin:6px 0}
+.howto-card .meta{margin-top:14px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.howto-bar{height:4px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden;flex:1}
+.howto-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--mint),var(--sky));width:100%;transform-origin:left;animation:howtoDrain 5s linear forwards}
+@keyframes howtoDrain{to{transform:scaleX(0)}}
 /* pixel fighter / race bars */
 .hpbar{height:14px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden;flex:1}
 .hpbar i{display:block;height:100%;background:linear-gradient(90deg,#3ddc97,#ffd23f,#ff6b6b);transition:width .2s}

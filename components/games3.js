@@ -34,7 +34,6 @@ const CH_PCS = { K: "♔", Q: "♕", R: "♖", B: "♗", N: "♘", P: "♙", k: 
 
 function chSide(pc) { return pc ? (pc === pc.toUpperCase() ? "w" : "b") : null; }
 
-// Local legal-move preview (mirrors server roughly for UX)
 function localMoves(board, y, x, turn) {
   const pc = board[y][x];
   if (!pc || chSide(pc) !== turn) return [];
@@ -75,24 +74,26 @@ function localMoves(board, y, x, turn) {
 export function Chess({ room, me }) {
   const s = getSocket();
   const st = room.state;
-  const mySide = st.ids.w === me ? "w" : "b";
+  const mySide = st.ids?.w === me ? "w" : "b";
   const myTurn = st.turn === mySide && !st.winner;
   const [sel, setSel] = useState(null);
   const moves = useMemo(() => (sel ? localMoves(st.board, sel[0], sel[1], st.turn) : []), [sel, st.board, st.turn]);
-
-  // flip board so each player sees own pieces at bottom
   const flip = mySide === "b";
 
-  const click = (y, x) => {
+  const click = (dispY, dispX) => {
     if (!myTurn) return;
-    const ry = flip ? 7 - y : y, rx = flip ? 7 - x : x;
+    const ry = flip ? 7 - dispY : dispY;
+    const rx = flip ? 7 - dispX : dispX;
     if (sel) {
       if (moves.some(([my, mx]) => my === ry && mx === rx)) {
         s.emit("ch:move", { fy: sel[0], fx: sel[1], ty: ry, tx: rx });
         setSel(null);
         return;
       }
+      // reselect own piece
+      if (chSide(st.board[ry][rx]) === mySide) { setSel([ry, rx]); return; }
       setSel(null);
+      return;
     }
     if (chSide(st.board[ry][rx]) === mySide) setSel([ry, rx]);
   };
@@ -103,8 +104,14 @@ export function Chess({ room, me }) {
 
   const last = st.last || [];
   return (
-    <div>
+    <div className="chess-wrap">
       <p className={`status ${cls}`}>{txt}</p>
+      <p className="meta" style={{ marginBottom: 8 }}>
+        You are <b style={{ color: mySide === "w" ? "#f5f0e0" : "#222", background: mySide === "w" ? "#5c4030" : "#f0d9b5", padding: "2px 8px", borderRadius: 6 }}>
+          {mySide === "w" ? "White ♔" : "Black ♚"}
+        </b>
+        {mySide === "b" ? " · board flipped so your pieces are at the bottom" : ""}
+      </p>
       <div className="chess" role="grid">
         {Array.from({ length: 8 }, (_, y) =>
           Array.from({ length: 8 }, (_, x) => {
@@ -121,27 +128,30 @@ export function Chess({ room, me }) {
                 type="button"
                 className={`sq ${light ? "light" : "dark"}${isSel ? " sel" : ""}${isMv && !isCap ? " mv" : ""}${isCap ? " cap" : ""}${isLast ? " last" : ""}`}
                 onClick={() => click(y, x)}
-                aria-label={`${ry},${rx} ${pc || "empty"}`}
+                aria-label={`${String.fromCharCode(97 + rx)}${8 - ry} ${pc || "empty"}`}
               >
-                {pc ? CH_PCS[pc] : ""}
+                {pc ? <span className={chSide(pc) === "w" ? "pc-w" : "pc-b"}>{CH_PCS[pc]}</span> : null}
               </button>
             );
           })
         )}
       </div>
-      <p className="meta" style={{ marginTop: 10 }}>You are {mySide === "w" ? "White ♔" : "Black ♚"}. Tap a piece, then a square.</p>
-      <div style={{ textAlign: "center", marginTop: 10 }}><Again show={!!st.winner} /></div>
+      <div style={{ textAlign: "center", marginTop: 12 }}><Again show={!!st.winner} /></div>
     </div>
   );
 }
+
+const DICE = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
 export function SnakesLadders({ room, me }) {
   const s = getSocket();
   const st = room.state;
   const myTurn = st.turn === me && !st.winner;
-  const [txt, cls] = st.winner ? banner(room, me, st.winner, null) : [myTurn ? "Your turn — roll the dice!" : "Waiting for opponent…", myTurn ? "turn" : ""];
+  const [rolling, setRolling] = useState(false);
+  const [txt, cls] = st.winner
+    ? banner(room, me, st.winner, null)
+    : [myTurn ? "Your turn — roll the dice!" : "Waiting for opponent…", myTurn ? "turn" : ""];
 
-  // board cells 1-100 in snakes pattern
   const cells = [];
   for (let row = 9; row >= 0; row--) {
     const base = row * 10;
@@ -153,24 +163,49 @@ export function SnakesLadders({ room, me }) {
 
   const posA = st.pos[room.players[0].id] || 0;
   const posB = st.pos[room.players[1]?.id] || 0;
+  const snakes = st.snakes || {};
+  const ladders = st.ladders || {};
+
+  const roll = () => {
+    if (!myTurn || rolling) return;
+    setRolling(true);
+    s.emit("snl:roll");
+    setTimeout(() => setRolling(false), 400);
+  };
 
   return (
-    <div>
+    <div className="snl-wrap">
       <p className={`status ${cls}`}>{txt}</p>
+      <div style={{ display: "flex", justifyContent: "center", gap: 16, marginBottom: 8, flexWrap: "wrap" }}>
+        {room.players.map((p, i) => (
+          <span key={p.id} className="pill" style={{ borderColor: PC[i] }}>
+            <span style={{ display: "inline-block", width: 12, height: 12, borderRadius: "50%", background: PC[i], marginRight: 6 }} />
+            {p.id === me ? "You" : p.name}: <b>{st.pos[p.id] || 0}</b>
+          </span>
+        ))}
+      </div>
       {st.last && (
-        <p className="meta" style={{ textAlign: "center" }}>
-          {room.players.find((p) => p.id === st.last.by)?.name} rolled <b>{st.last.die}</b> → square {st.last.pos}
+        <p className="meta" style={{ textAlign: "center", marginBottom: 6 }}>
+          {room.players.find((p) => p.id === st.last.by)?.name} rolled{" "}
+          <span className="dice-result">{DICE[(st.last.die || 1) - 1]} {st.last.die}</span>
+          {" → "} square <b>{st.last.pos}</b>
+          {st.last.via === "ladder" && " 🪜 climbed a ladder!"}
+          {st.last.via === "snake" && " 🐍 slid down a snake!"}
         </p>
       )}
       <div className="snl">
         {cells.map((n) => {
           const hasA = posA === n, hasB = posB === n;
-          const snake = st.snakes?.[n], ladder = st.ladders?.[n];
+          const isSnake = !!snakes[n], isLadder = !!ladders[n];
+          const isStart = n === 1, isFinish = n === 100;
           return (
-            <div key={n} className={`cell ${(Math.floor((n - 1) / 10) % 2 === 0) === ((n - 1) % 10 % 2 === 0) ? "light" : "dark"}`}>
-              <span style={{ opacity: 0.7 }}>{n}</span>
-              {snake && <span style={{ position: "absolute", bottom: 2, fontSize: "0.7rem" }}>🐍</span>}
-              {ladder && <span style={{ position: "absolute", bottom: 2, fontSize: "0.7rem" }}>ladder</span>}
+            <div
+              key={n}
+              className={`cell ${isStart ? "start" : isFinish ? "finish" : (Math.floor((n - 1) / 10) + (n - 1) % 10) % 2 === 0 ? "light" : "dark"}`}
+            >
+              <span>{n}</span>
+              {isLadder && <span className="mark" title={`Ladder → ${ladders[n]}`}>🪜</span>}
+              {isSnake && <span className="mark" title={`Snake → ${snakes[n]}`}>🐍</span>}
               {hasA && <span className={`tok a${hasB ? " both-a" : ""}`} title={room.players[0].name} />}
               {hasB && <span className={`tok b${hasA ? " both-b" : ""}`} title={room.players[1]?.name} />}
             </div>
@@ -178,8 +213,10 @@ export function SnakesLadders({ room, me }) {
         })}
       </div>
       <div style={{ textAlign: "center", marginTop: 14 }}>
-        <button className="dice-btn primary" disabled={!myTurn} onClick={() => s.emit("snl:roll")} aria-label="Roll dice">🎲</button>
-        <p className="meta">Roll a 6 for an extra turn. First to 100 wins.</p>
+        <button className="dice-btn primary" disabled={!myTurn || rolling} onClick={roll} aria-label="Roll dice">
+          {rolling ? "…" : "🎲 Roll"}
+        </button>
+        <p className="meta">Need exact roll to finish. Roll a 6 for an extra turn.</p>
         <Again show={!!st.winner} />
       </div>
     </div>
@@ -214,44 +251,96 @@ export function PixelFighter({ room, me }) {
         punch: inp.punch || m.punch, kick: inp.kick || m.kick,
       });
     }, 33);
+
+    const drawHuman = (x, y, face, col, skin, atk, kind, hit) => {
+      g.save();
+      if (hit > 0) g.globalAlpha = 0.55 + 0.45 * Math.sin(performance.now() / 35);
+      // shadow
+      g.fillStyle = "rgba(0,0,0,.25)";
+      g.beginPath(); g.ellipse(x, y + 4, 22, 6, 0, 0, 7); g.fill();
+      // legs
+      g.strokeStyle = col; g.lineWidth = 7; g.lineCap = "round";
+      const legSpread = atk > 0 && kind === "k" ? 16 : 8;
+      g.beginPath();
+      g.moveTo(x - legSpread, y); g.lineTo(x - 4, y - 28);
+      g.moveTo(x + legSpread, y); g.lineTo(x + 4, y - 28);
+      g.stroke();
+      // torso
+      g.fillStyle = col;
+      rr(g, x - 12, y - 58, 24, 32, 6); g.fill();
+      // belt
+      g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect(x - 12, y - 32, 24, 5);
+      // head
+      g.fillStyle = skin;
+      g.beginPath(); g.arc(x, y - 72, 13, 0, 7); g.fill();
+      // hair
+      g.fillStyle = col;
+      g.beginPath(); g.arc(x, y - 78, 11, Math.PI, 0); g.fill();
+      // eyes
+      g.fillStyle = "#111";
+      g.beginPath(); g.arc(x + face * 4, y - 74, 2.2, 0, 7); g.fill();
+      // arms
+      g.strokeStyle = skin; g.lineWidth = 6;
+      if (atk > 0) {
+        // attacking arm stretched
+        const reach = kind === "k" ? 0 : 42;
+        g.beginPath();
+        g.moveTo(x - face * 10, y - 50);
+        g.lineTo(x + face * (10 + reach), y - (kind === "k" ? 36 : 48));
+        g.stroke();
+        // other arm
+        g.beginPath();
+        g.moveTo(x + face * 10, y - 50);
+        g.lineTo(x + face * 4, y - 36);
+        g.stroke();
+        if (kind === "k") {
+          // kicking leg
+          g.strokeStyle = col; g.lineWidth = 7;
+          g.beginPath();
+          g.moveTo(x + face * 4, y - 28);
+          g.lineTo(x + face * 50, y - 20);
+          g.stroke();
+        }
+      } else {
+        g.beginPath();
+        g.moveTo(x - 10, y - 50); g.lineTo(x - 16, y - 34);
+        g.moveTo(x + 10, y - 50); g.lineTo(x + 16, y - 34);
+        g.stroke();
+      }
+      g.restore();
+    };
+
     let raf;
     const frame = () => {
       const d = rt.current;
-      g.fillStyle = "#0a1220"; g.fillRect(0, 0, 800, 360);
+      // background
+      const bg = g.createLinearGradient(0, 0, 0, 360);
+      bg.addColorStop(0, "#1a1040"); bg.addColorStop(0.6, "#0e1a30"); bg.addColorStop(1, "#0a1520");
+      g.fillStyle = bg; g.fillRect(0, 0, 800, 360);
+      // crowd lights
+      g.fillStyle = "rgba(255,210,63,.06)";
+      g.fillRect(0, 0, 800, 40);
       // floor
-      g.fillStyle = "#1a2a40"; g.fillRect(0, 300, 800, 60);
-      g.strokeStyle = "rgba(255,255,255,.08)";
-      for (let x = 0; x < 800; x += 40) { g.beginPath(); g.moveTo(x, 300); g.lineTo(x, 360); g.stroke(); }
+      g.fillStyle = "#2a1a10"; g.fillRect(0, 300, 800, 60);
+      g.strokeStyle = "rgba(255,180,80,.15)"; g.lineWidth = 2;
+      for (let x = 0; x < 800; x += 50) { g.beginPath(); g.moveTo(x, 300); g.lineTo(x - 20, 360); g.stroke(); }
+      g.fillStyle = "rgba(255,255,255,.08)"; g.fillRect(0, 298, 800, 3);
+
       if (d) {
-        d.f.forEach((q, i) => {
+        d.f.forEach((q) => {
           const [id, x, y, hp, face, atk, kind, hit, wins] = q;
-          const col = id === me ? "#3ddc97" : "#ff6b6b";
-          const dark = id === me ? "#1a8f63" : "#b53a3a";
-          g.save();
-          if (hit > 0) g.globalAlpha = 0.6 + 0.4 * Math.sin(performance.now() / 40);
-          // body
-          g.fillStyle = col;
-          rr(g, x - 18, y - 56, 36, 56, 8); g.fill();
-          // head
-          g.beginPath(); g.arc(x, y - 68, 14, 0, 7); g.fill();
-          // arms / attack
-          if (atk > 0) {
-            g.fillStyle = kind === "k" ? "#b388ff" : "#ff9f1c";
-            const reach = kind === "k" ? 48 : 36;
-            rr(g, face > 0 ? x + 10 : x - 10 - reach, y - (kind === "k" ? 30 : 40), reach, kind === "k" ? 14 : 10, 4);
-            g.fill();
-          }
-          g.restore();
-          // name / wins
-          g.fillStyle = "#eaf2ff"; g.font = "600 12px sans-serif"; g.textAlign = "center";
+          const col = id === me ? "#3d9bdc" : "#e04545";
+          const skin = id === me ? "#f5d0b0" : "#e8c4a0";
+          drawHuman(x, y, face || 1, col, skin, atk, kind, hit);
+          g.fillStyle = "#eaf2ff"; g.font = "700 12px sans-serif"; g.textAlign = "center";
           const nm = room.players.find((p) => p.id === id)?.name || "?";
-          g.fillText(`${nm}  ★${wins}`, x, y - 90);
+          g.fillText(`${nm}  ★${wins}`, x, y - 96);
         });
         if (d.winner) {
           g.fillStyle = "#ffd23f"; g.font = "800 36px sans-serif"; g.textAlign = "center";
           g.fillText(d.winner === me ? "KO! You win!" : "KO!", 400, 160);
         } else {
-          g.fillStyle = "rgba(255,255,255,.5)"; g.font = "700 18px sans-serif"; g.textAlign = "center";
+          g.fillStyle = "rgba(255,255,255,.55)"; g.font = "700 16px sans-serif"; g.textAlign = "center";
           g.fillText(`Round ${d.round} · first to ${d.target}`, 400, 28);
         }
       }
@@ -264,7 +353,6 @@ export function PixelFighter({ room, me }) {
     };
   }, [s, me, room.players, rt]);
 
-  // HP bars from last snap
   const [hp, setHp] = useState([100, 100]);
   useEffect(() => {
     const id = setInterval(() => {
@@ -293,7 +381,7 @@ export function PixelFighter({ room, me }) {
         <div className="dpad">
           <button className="u" onPointerDown={hold("u", 1)} onPointerUp={hold("u", 0)} onPointerLeave={hold("u", 0)} aria-label="Jump">▲</button>
           <button onPointerDown={hold("l", 1)} onPointerUp={hold("l", 0)} onPointerLeave={hold("l", 0)} aria-label="Left">◀</button>
-          <button onPointerDown={hold("u", 0)} style={{visibility:"hidden"}} aria-hidden>▼</button>
+          <button style={{ visibility: "hidden" }} aria-hidden>▼</button>
           <button onPointerDown={hold("r", 1)} onPointerUp={hold("r", 0)} onPointerLeave={hold("r", 0)} aria-label="Right">▶</button>
         </div>
         <div className="atk-row">
@@ -335,7 +423,7 @@ export function MazeChase({ room, me }) {
           }
         }
         d.p.forEach((q) => {
-          const [id, x, y, role, score] = q;
+          const [id, x, y, role] = q;
           const col = role === "h" ? "#ff6b6b" : "#3ddc97";
           g.save(); g.shadowColor = col; g.shadowBlur = 12;
           g.fillStyle = col;
@@ -381,16 +469,20 @@ export function PongShowdown({ room, me }) {
   const ref = useRef(null);
   const rt = useRT();
   const seat = st.ids.indexOf(me);
+  const myY = useRef(250);
 
   useEffect(() => {
     const cv = ref.current, g = cv.getContext("2d");
     const keys = { u: 0, d: 0 };
-    let myY = 250, lastSent = -1;
+    let lastSent = -1;
     const disp = [200, 200];
-    const send = () => { const y = Math.round(myY); if (y !== lastSent) { lastSent = y; s.emit("ps:y", y); } };
+    const send = () => {
+      const y = Math.round(myY.current);
+      if (y !== lastSent) { lastSent = y; s.emit("ps:y", y); }
+    };
     const mm = (e) => {
       const r = cv.getBoundingClientRect();
-      myY = ((e.clientY - r.top) / r.height) * 500;
+      myY.current = ((e.clientY - r.top) / r.height) * 500;
       send();
     };
     const kd = (v) => (e) => {
@@ -402,9 +494,13 @@ export function PongShowdown({ room, me }) {
     const down = kd(1), up = kd(0);
     cv.addEventListener("pointermove", mm); cv.addEventListener("pointerdown", mm);
     window.addEventListener("keydown", down); window.addEventListener("keyup", up);
+    // faster key movement
     const tick = setInterval(() => {
-      if (keys.u || keys.d) { myY = Math.max(0, Math.min(500, myY + (keys.d - keys.u) * 16)); send(); }
-    }, 30);
+      if (keys.u || keys.d) {
+        myY.current = Math.max(0, Math.min(500, myY.current + (keys.d - keys.u) * 22));
+        send();
+      }
+    }, 16);
     let raf;
     const frame = () => {
       const d = rt.current;
@@ -415,7 +511,8 @@ export function PongShowdown({ room, me }) {
       g.strokeStyle = "rgba(255,210,63,.35)"; g.lineWidth = 3; g.setLineDash([12, 12]);
       g.beginPath(); g.moveTo(400, 0); g.lineTo(400, 500); g.stroke(); g.setLineDash([]);
       if (d) {
-        d.p.forEach(([y], i) => { disp[i] += (y - disp[i]) * 0.55; });
+        // snap paddles harder (less lag)
+        d.p.forEach(([y], i) => { disp[i] += (y - disp[i]) * 0.85; });
         g.textAlign = "center"; g.font = "800 56px sans-serif"; g.fillStyle = "rgba(255,255,255,.18)";
         g.fillText(d.p[0][1], 280, 70); g.fillText(d.p[1][1], 520, 70);
         const cols = ["#ffd23f", "#ff6b6b"];
@@ -442,6 +539,17 @@ export function PongShowdown({ room, me }) {
     };
   }, [s, rt, seat, me]);
 
+  const nudge = (dir) => {
+    myY.current = Math.max(0, Math.min(500, myY.current + dir * 28));
+    s.emit("ps:y", Math.round(myY.current));
+  };
+  const holdRef = useRef(null);
+  const startHold = (dir) => {
+    nudge(dir);
+    holdRef.current = setInterval(() => nudge(dir), 40);
+  };
+  const stopHold = () => { if (holdRef.current) clearInterval(holdRef.current); holdRef.current = null; };
+
   const [txt, cls] = st.winner ? banner(room, me, st.winner, null) : [`First to ${st.target} — high speed!`, ""];
   return (
     <div className="arena-wrap">
@@ -450,16 +558,8 @@ export function PongShowdown({ room, me }) {
       <canvas ref={ref} className="arena" width={800} height={500} />
       <p className="meta" style={{ marginTop: 8 }}>Drag finger / mouse, or <kbd>W</kbd><kbd>S</kbd>. Ball speeds up every hit.</p>
       <div className="dpad">
-        <button className="u" onPointerDown={() => { /* continuous via keys style */ }} onPointerDownCapture={(e) => {
-          const iv = setInterval(() => s.emit("ps:y", Math.max(0, (rt.current?.p?.[seat]?.[0] || 200) - 20)), 40);
-          const up = () => { clearInterval(iv); window.removeEventListener("pointerup", up); };
-          window.addEventListener("pointerup", up);
-        }} aria-label="Up">▲</button>
-        <button onPointerDownCapture={(e) => {
-          const iv = setInterval(() => s.emit("ps:y", Math.min(500, (rt.current?.p?.[seat]?.[0] || 200) + 120)), 40);
-          const up = () => { clearInterval(iv); window.removeEventListener("pointerup", up); };
-          window.addEventListener("pointerup", up);
-        }} aria-label="Down">▼</button>
+        <button className="u" onPointerDown={() => startHold(-1)} onPointerUp={stopHold} onPointerLeave={stopHold} aria-label="Up">▲</button>
+        <button onPointerDown={() => startHold(1)} onPointerUp={stopHold} onPointerLeave={stopHold} aria-label="Down">▼</button>
       </div>
       <div style={{ textAlign: "center", marginTop: 10 }}><Again show={!!st.winner} /></div>
     </div>
@@ -495,17 +595,15 @@ export function MiniRacing({ room, me }) {
     const frame = () => {
       const d = rt.current;
       g.fillStyle = "#0a1a0a"; g.fillRect(0, 0, 800, 500);
-      // track oval
       g.strokeStyle = "#2a4a2a"; g.lineWidth = 70;
       g.beginPath(); g.ellipse(400, 250, 280, 160, 0, 0, 7); g.stroke();
       g.strokeStyle = "#3ddc97"; g.lineWidth = 2; g.setLineDash([10, 10]);
       g.beginPath(); g.ellipse(400, 250, 280, 160, 0, 0, 7); g.stroke(); g.setLineDash([]);
-      // start line
       g.strokeStyle = "#fff"; g.lineWidth = 3;
       g.beginPath(); g.moveTo(400 + 250, 250); g.lineTo(400 + 310, 250); g.stroke();
       if (d) {
-        d.c.forEach((q, i) => {
-          const [id, x, y, a, laps, spd] = q;
+        d.c.forEach((q) => {
+          const [id, x, y, a, laps] = q;
           const col = id === me ? "#4cc9f0" : "#ff6b6b";
           g.save();
           g.translate(x, y); g.rotate(a);
