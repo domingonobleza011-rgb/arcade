@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { getSocket } from "../lib/socket";
+import { Arena, HoldBtn, Stick } from "./touch";
 
 const PC = ["#ff6b6b", "#4cc9f0"]; // player colours by seat
 
@@ -314,19 +315,14 @@ export function Snake({ room, me }) {
   }, [s, me, room.players, rt]);
 
   const [txt, cls] = st.winner ? banner(room, me, st.winner, null) : ["Eat 🟡 to grow. Don't crash!", ""];
+  const dp = (k, sym) => <HoldBtn className={`pk-${k}`} label={k} onDown={() => dir(k)}>{sym}</HoldBtn>;
   return (
-    <div className="arena-wrap">
-      <p className={`status ${cls}`} style={{ marginBottom: 10 }}>{txt}</p>
+    <Arena ratio={1.6} hint="Arrow keys / WASD, swipe on the board, or use the on-screen pad. You are the green snake."
+      controls={<div className="tc-r"><div className="pad">{dp("u", "▲")}{dp("l", "◀")}{dp("d", "▼")}{dp("r", "▶")}</div></div>}>
+      <p className={`status ${cls}`}>{txt}</p>
       <canvas ref={ref} className="arena" width={800} height={500} />
-      <p className="meta" style={{ marginTop: 8 }}>Arrow keys / WASD, or swipe on the board. You are the <b style={{ color: "var(--mint)" }}>green</b> snake.</p>
-      <div className="dpad">
-        <button className="u" onPointerDown={() => dir("u")} aria-label="Up">▲</button>
-        <button onPointerDown={() => dir("l")} aria-label="Left">◀</button>
-        <button onPointerDown={() => dir("d")} aria-label="Down">▼</button>
-        <button onPointerDown={() => dir("r")} aria-label="Right">▶</button>
-      </div>
-      <div style={{ textAlign: "center", marginTop: 10 }}><Again show={!!st.winner} /></div>
-    </div>
+      <div className="again"><Again show={!!st.winner} /></div>
+    </Arena>
   );
 }
 
@@ -411,13 +407,12 @@ export function Pong({ room, me }) {
 
   const [txt, cls] = st.winner ? banner(room, me, st.winner, null) : [`First to ${st.target} wins`, ""];
   return (
-    <div className="arena-wrap">
+    <Arena ratio={1.6} hint="Move with the mouse / your finger, or W S / ↑ ↓. Hit the ball near a paddle edge to steer it.">
       <ScoreBar room={room} me={me} />
-      <p className={`status ${cls}`} style={{ margin: "10px auto" }}>{txt}</p>
+      <p className={`status ${cls}`}>{txt}</p>
       <canvas ref={ref} className="arena" width={800} height={500} />
-      <p className="meta" style={{ marginTop: 8 }}>Move with the mouse / finger, or <kbd>W</kbd><kbd>S</kbd> / <kbd>↑</kbd><kbd>↓</kbd>. Hit the ball near a paddle edge to steer it.</p>
-      <div style={{ textAlign: "center", marginTop: 10 }}><Again show={!!st.winner} /></div>
-    </div>
+      <div className="again"><Again show={!!st.winner} /></div>
+    </Arena>
   );
 }
 
@@ -457,47 +452,40 @@ export function Tanks({ room, me }) {
   const st = room.state;
   const ref = useRef(null);
   const rt = useRT();
-  const mob = useRef({ f: 0, b: 0, l: 0, r: 0, fire: 0 });
+  const inpR = useRef({ f: 0, b: 0, l: 0, r: 0, fire: 0, aim: 0 });
+  const dirtyR = useRef(false);
+  const taim = useRef(null); // aim angle from the on-screen stick, null when idle
+  const setK = (k, v) => { v = v ? 1 : 0; if (inpR.current[k] !== v) { inpR.current[k] = v; dirtyR.current = true; } };
 
   useEffect(() => {
     const cv = ref.current, g = cv.getContext("2d");
-    const inp = { f: 0, b: 0, l: 0, r: 0, fire: 0, aim: 0 };
+    const inp = inpR.current;
     const mouse = { x: 400, y: 250 };
-    let dirty = false;
     const KEYS = { w: "f", arrowup: "f", s: "b", arrowdown: "b", a: "l", arrowleft: "l", d: "r", arrowright: "r", " ": "fire" };
     const key = (v) => (e) => {
       if (e.target.tagName === "INPUT") return;
       const k = KEYS[e.key.toLowerCase()];
       if (!k) return;
       e.preventDefault();
-      if (inp[k] !== v) { inp[k] = v; dirty = true; }
+      if (inp[k] !== v) { inp[k] = v; dirtyR.current = true; }
     };
     const kd = key(1), ku = key(0);
     const mm = (e) => {
+      if (e.pointerType !== "mouse") return;
       const r = cv.getBoundingClientRect();
       mouse.x = ((e.clientX - r.left) / r.width) * 800; mouse.y = ((e.clientY - r.top) / r.height) * 500;
     };
-    const md = () => { inp.fire = 1; dirty = true; };
-    const mu = () => { if (inp.fire && !mob.current.fire) { inp.fire = 0; dirty = true; } };
+    const md = (e) => { if (e.pointerType !== "mouse") return; inp.fire = 1; dirtyR.current = true; };
+    const mu = (e) => { if (e.pointerType === "mouse" && inp.fire) { inp.fire = 0; dirtyR.current = true; } };
     window.addEventListener("keydown", kd); window.addEventListener("keyup", ku); window.addEventListener("pointerup", mu);
     cv.addEventListener("pointermove", mm); cv.addEventListener("pointerdown", md);
     const send = setInterval(() => {
-      const m = mob.current;
-      for (const k of ["f", "b", "l", "r", "fire"]) {
-        if (m[k] && !inp[k]) { inp[k] = 1; dirty = true; }
-        else if (!m[k] && inp[k] && k !== "fire") { /* keyboard may still hold */ }
-        if (m.fire) inp.fire = 1;
-      }
-      // apply mobile drive if held
-      if (m.f || m.b || m.l || m.r) {
-        inp.f = m.f; inp.b = m.b; inp.l = m.l; inp.r = m.r; dirty = true;
-      }
       const d = rt.current, mt = d && d.t.find((t) => t[0] === me);
       if (mt) {
-        const a = Math.atan2(mouse.y - mt[2], mouse.x - mt[1]);
-        if (Math.abs(a - inp.aim) > 0.02) { inp.aim = a; dirty = true; }
+        const a = taim.current ?? Math.atan2(mouse.y - mt[2], mouse.x - mt[1]);
+        if (Math.abs(a - inp.aim) > 0.02) { inp.aim = a; dirtyR.current = true; }
       }
-      if (dirty) { dirty = false; s.emit("tk:input", { ...inp, fire: inp.fire || m.fire }); }
+      if (dirtyR.current) { dirtyR.current = false; s.emit("tk:input", inp); }
     }, 33);
 
     let raf;
@@ -552,24 +540,21 @@ export function Tanks({ room, me }) {
   }, [s, me, room.players, rt]);
 
   const [txt, cls] = st.winner ? banner(room, me, st.winner, null) : ["Outgun your rival — shells ricochet twice!", ""];
-  const hold = (k, v) => () => { mob.current[k] = v; };
+  const drive = ({ x, y }) => { setK("r", x > 0.4); setK("l", x < -0.4); setK("b", y > 0.4); setK("f", y < -0.4); };
+  const aim = ({ x, y, mag, active }) => { taim.current = active && mag > 0.2 ? Math.atan2(y, x) : null; };
   return (
-    <div className="arena-wrap">
-      <p className={`status ${cls}`} style={{ marginBottom: 10 }}>{txt}</p>
-      <p className="landscape-hint">Tip: rotate to landscape for a bigger arena.</p>
-      <canvas ref={ref} className="arena" width={800} height={500} />
-      <p className="meta" style={{ marginTop: 8 }}><kbd>W</kbd><kbd>S</kbd> drive · <kbd>A</kbd><kbd>D</kbd> rotate · mouse aims · click / <kbd>Space</kbd> / Fire button shoots.</p>
-      <div className="mctl">
-        <div className="dpad">
-          <button className="u" onPointerDown={hold("f", 1)} onPointerUp={hold("f", 0)} onPointerLeave={hold("f", 0)} aria-label="Forward">▲</button>
-          <button onPointerDown={hold("l", 1)} onPointerUp={hold("l", 0)} onPointerLeave={hold("l", 0)} aria-label="Left">◀</button>
-          <button onPointerDown={hold("b", 1)} onPointerUp={hold("b", 0)} onPointerLeave={hold("b", 0)} aria-label="Back">▼</button>
-          <button onPointerDown={hold("r", 1)} onPointerUp={hold("r", 0)} onPointerLeave={hold("r", 0)} aria-label="Right">▶</button>
+    <Arena ratio={1.6} hint="W S drive · A D rotate hull · mouse aims the turret · click or Space fires. On a phone: left stick drives, right stick aims, 💥 fires."
+      controls={<>
+        <div className="tc-l"><Stick label="Drive" onChange={drive} /></div>
+        <div className="tc-r">
+          <HoldBtn className="atk" label="Fire" onDown={() => setK("fire", 1)} onUp={() => setK("fire", 0)}>💥</HoldBtn>
+          <Stick label="Aim turret" onChange={aim} />
         </div>
-        <button className="fire-btn" onPointerDown={hold("fire", 1)} onPointerUp={hold("fire", 0)} onPointerLeave={hold("fire", 0)} aria-label="Fire">🔥</button>
-      </div>
-      <div style={{ textAlign: "center", marginTop: 10 }}><Again show={!!st.winner} /></div>
-    </div>
+      </>}>
+      <p className={`status ${cls}`}>{txt}</p>
+      <canvas ref={ref} className="arena" width={800} height={500} />
+      <div className="again"><Again show={!!st.winner} /></div>
+    </Arena>
   );
 }
 
@@ -691,3 +676,6 @@ export function QuickDraw({ room, me }) {
     </>
   );
 }
+
+// shared helpers re-used by games3.js
+export { ScoreBar, banner, Again, rr, useRT };

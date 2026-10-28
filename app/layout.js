@@ -6,6 +6,8 @@ const body = DM_Sans({ subsets: ["latin"], variable: "--font-body" });
 
 export const metadata = { title: "Arcade", description: "Realtime multiplayer games with chat and emotes." };
 
+export const viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#080f1c" };
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${display.variable} ${body.variable}`}>

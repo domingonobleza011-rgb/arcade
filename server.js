@@ -8,7 +8,7 @@ const port = process.env.PORT || 3000;
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
-const MAX = { tictactoe: 2, quiz: 2, draw: 8, shooter: 8, pictionary: 8, chat: 30, connect4: 2, checkers: 2, rps: 2, memory: 2, hangman: 2, battleship: 2, dots: 2, reversi: 2, gomoku: 2, snake: 2, pong: 2, tanks: 2, scramble: 2, mathrace: 2, quickdraw: 2, chess: 2, snakesladders: 2, fighter: 2, maze: 2, pongshow: 2, racing: 2 };
+const MAX = { tictactoe: 2, quiz: 2, draw: 8, shooter: 8, pictionary: 8, chat: 30, connect4: 2, checkers: 2, rps: 2, memory: 2, hangman: 2, battleship: 2, dots: 2, reversi: 2, gomoku: 2, snake: 2, pong: 2, tanks: 2, scramble: 2, mathrace: 2, quickdraw: 2, chess: 2, ladders: 2, fighter: 2, maze: 2, pongx: 2, racing: 2 };
 const MIN = { pictionary: 2 };
 const EMOTES = ["👍", "😂", "😮", "🔥", "😢", "👏", "😎", "🤯"];
 const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
