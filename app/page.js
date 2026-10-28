@@ -1,25 +1,13 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getSocket } from "../lib/socket";
 import Room from "../components/Room";
-
-const GAMES = [
-  { id: "tictactoe", name: "Tic-tac-toe", blurb: "Classic three in a row. 2 players." },
-  { id: "connect4", name: "Connect Four", blurb: "Drop discs and connect four. 2 players." },
-  { id: "checkers", name: "Checkers", blurb: "American checkers with kings and multi-jumps. 2 players." },
-  { id: "rps", name: "Rock Paper Scissors", blurb: "Best of 5. First to 3 wins. 2 players." },
-  { id: "memory", name: "Memory Match", blurb: "Flip cards and find pairs. Most matches wins. 2 players." },
-  { id: "hangman", name: "Hangman", blurb: "Guess the word letter by letter. 6 wrong and you're out. 2 players." },
-  { id: "quiz", name: "Quiz battle", blurb: "5 random questions. First correct answer scores double. 2 players." },
-  { id: "draw", name: "Drawing board", blurb: "Sketch together in real time. Up to 8 players." },
-  { id: "pictionary", name: "Draw & guess", blurb: "One draws a secret word, others guess in chat. 2 to 8 players." },
-  { id: "shooter", name: "Arena shooter", blurb: "Top-down free-for-all. First to 10 frags wins. Up to 8. Desktop only." },
-  { id: "chat", name: "Chat room", blurb: "Public lobby or private room with a code. Up to 30 people." },
-];
+import { GAMES, CATS, META } from "../components/registry";
 
 export default function Home() {
   const [name, setName] = useState("");
   const [game, setGame] = useState("tictactoe");
+  const [cat, setCat] = useState("All");
   const [code, setCode] = useState("");
   const [room, setRoom] = useState(null);
   const [me, setMe] = useState(null);
@@ -48,24 +36,48 @@ export default function Home() {
   };
   const leave = () => { getSocket().emit("leave"); setRoom(null); setSearching(false); };
 
+  const list = useMemo(() => GAMES.filter((g) => cat === "All" || g.cat === cat), [cat]);
+  const cur = META[game];
+
   if (room) return <main className="wrap"><Room room={room} me={me} onLeave={leave} /></main>;
 
   return (
     <main className="wrap">
-      <h1>Play together</h1>
-      <p className="sub">Pick a game, then find an opponent or share a room code.</p>
+      <div className="hero">
+        <span className="brand-pill">🎮 {GAMES.length} games · realtime multiplayer · live chat</span>
+        <h1>Play <span>together</span></h1>
+        <p className="sub">Pick a game, then find an opponent or share a room code.</p>
+      </div>
+
       <section className="panel">
-        <label>
-          Your name <input value={name} maxLength={16} placeholder="Guest" onChange={(e) => setName(e.target.value)} />
-        </label>
+        <div className="namebar">
+          <label>
+            Your name <input value={name} maxLength={16} placeholder="Guest" onChange={(e) => setName(e.target.value)} />
+          </label>
+        </div>
+
+        <div className="chips" role="tablist" aria-label="Game categories">
+          {CATS.map((c) => (
+            <button key={c} className="chip" aria-pressed={cat === c} onClick={() => setCat(c)}>{c}</button>
+          ))}
+        </div>
+
         <div className="games">
-          {GAMES.map((g) => (
-            <button key={g.id} className="game" aria-pressed={game === g.id} onClick={() => setGame(g.id)}>
+          {list.map((g) => (
+            <button key={g.id} className="gcard" style={{ "--a": g.a }} aria-pressed={game === g.id} onClick={() => setGame(g.id)}>
+              <span className="ic" aria-hidden>{g.icon}</span>
               <b>{g.name}</b>
-              <span>{g.blurb}</span>
+              <span className="d">{g.blurb}</span>
+              <span className={`tag ${g.isNew ? "new" : ""}`}>{g.isNew ? "NEW" : g.players}</span>
             </button>
           ))}
         </div>
+
+        <div className="picked">
+          <span className="ic" aria-hidden>{cur.icon}</span>
+          <div><b>{cur.name}</b> <span className="meta">· {cur.players} players</span></div>
+        </div>
+
         <div className="row">
           <button className="primary" disabled={searching} onClick={() => emit("find", { game, name })}>
             {searching ? "Searching for an opponent…" : game === "chat" ? "Join public lobby" : "Find opponent"}

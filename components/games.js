@@ -273,27 +273,52 @@ export function Shooter({ me }) {
     let raf;
     const frame = () => {
       const { p, b, over } = st.current;
-      g.fillStyle = "#0b1422"; g.fillRect(0, 0, 800, 500);
-      g.fillStyle = "#27405f"; walls.current.forEach((w) => g.fillRect(w.x, w.y, w.w, w.h));
-      g.fillStyle = "#ffd23f"; b.forEach(([x, y]) => { g.beginPath(); g.arc(x, y, 3, 0, 7); g.fill(); });
+      const now = performance.now();
+      // floor with a faint grid
+      const bg = g.createLinearGradient(0, 0, 0, 500);
+      bg.addColorStop(0, "#0b1626"); bg.addColorStop(1, "#08111e");
+      g.fillStyle = bg; g.fillRect(0, 0, 800, 500);
+      g.strokeStyle = "rgba(80,120,170,.12)"; g.lineWidth = 1;
+      for (let x = 0; x <= 800; x += 40) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 500); g.stroke(); }
+      for (let y = 0; y <= 500; y += 40) { g.beginPath(); g.moveTo(0, y); g.lineTo(800, y); g.stroke(); }
+      // walls with a lit top edge
+      walls.current.forEach((w) => {
+        g.fillStyle = "#223b5a"; g.fillRect(w.x, w.y, w.w, w.h);
+        g.fillStyle = "#35597f"; g.fillRect(w.x, w.y, w.w, 3);
+        g.strokeStyle = "#4b7aaa"; g.lineWidth = 1.5; g.strokeRect(w.x + .5, w.y + .5, w.w - 1, w.h - 1);
+      });
+      // bullets with glow
+      g.save(); g.shadowColor = "#ffd23f"; g.shadowBlur = 12; g.fillStyle = "#fff3b0";
+      b.forEach(([x, y]) => { g.beginPath(); g.arc(x, y, 3.2, 0, 7); g.fill(); });
+      g.restore();
       p.forEach(([id, name, x, y, aim, hp, , , dead]) => {
         if (dead) return;
-        g.fillStyle = id === me ? "#3ddc97" : "#ff6b6b";
-        g.beginPath(); g.arc(x, y, 14, 0, 7); g.fill();
-        g.strokeStyle = "#fff"; g.lineWidth = 4; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(aim) * 22, y + Math.sin(aim) * 22); g.stroke();
-        g.fillStyle = "#333"; g.fillRect(x - 16, y - 26, 32, 4);
-        g.fillStyle = "#3ddc97"; g.fillRect(x - 16, y - 26, (32 * hp) / 100, 4);
-        g.fillStyle = "#eaf2ff"; g.font = "12px sans-serif"; g.textAlign = "center"; g.fillText(name, x, y - 32);
+        const mineP = id === me, col = mineP ? "#3ddc97" : "#ff6b6b";
+        g.save();
+        g.shadowColor = col; g.shadowBlur = 16;
+        const grad = g.createRadialGradient(x - 4, y - 4, 2, x, y, 15);
+        grad.addColorStop(0, "#fff"); grad.addColorStop(.25, col); grad.addColorStop(1, mineP ? "#14804f" : "#a62f2f");
+        g.fillStyle = grad; g.beginPath(); g.arc(x, y, 14, 0, 7); g.fill();
+        g.restore();
+        g.strokeStyle = "#eaf2ff"; g.lineWidth = 5; g.lineCap = "round";
+        g.beginPath(); g.moveTo(x + Math.cos(aim) * 6, y + Math.sin(aim) * 6); g.lineTo(x + Math.cos(aim) * 24, y + Math.sin(aim) * 24); g.stroke();
+        g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(x - 17, y - 28, 34, 6);
+        g.fillStyle = hp > 50 ? "#3ddc97" : hp > 25 ? "#ffd23f" : "#ff6b6b"; g.fillRect(x - 16, y - 27, (32 * hp) / 100, 4);
+        g.fillStyle = "#eaf2ff"; g.font = "600 12px sans-serif"; g.textAlign = "center"; g.fillText(name, x, y - 34);
       });
+      // scoreboard
+      g.fillStyle = "rgba(5,11,22,.6)"; g.fillRect(620, 6, 174, 14 + p.length * 17);
       g.font = "13px sans-serif"; g.textAlign = "right";
       [...p].sort((a, c) => c[6] - a[6]).forEach((q, i) => {
         g.fillStyle = q[0] === me ? "#3ddc97" : "#eaf2ff";
-        g.fillText(`${q[1]}  ${q[6]} / ${q[7]}`, 790, 20 + i * 16);
+        g.fillText(`${q[1]}  ${q[6]} / ${q[7]}`, 788, 24 + i * 17);
       });
       const self = p.find((q) => q[0] === me);
-      g.textAlign = "center"; g.font = "bold 28px sans-serif"; g.fillStyle = "#ffd23f";
+      g.textAlign = "center"; g.font = "bold 30px sans-serif"; g.fillStyle = "#ffd23f";
+      g.globalAlpha = .75 + .25 * Math.sin(now / 200);
       if (over) g.fillText(`${over} wins!`, 400, 250);
       else if (self && self[8]) g.fillText("Respawning…", 400, 250);
+      g.globalAlpha = 1;
       raf = requestAnimationFrame(frame);
     };
     frame();
@@ -308,7 +333,7 @@ export function Shooter({ me }) {
   return (
     <div style={{ width: "100%" }}>
       <p className="meta">Move with WASD or arrows. Aim with the mouse and hold to shoot. First to 10 frags wins.</p>
-      <canvas ref={ref} width={800} height={500} />
+      <canvas ref={ref} className="arena" width={800} height={500} />
     </div>
   );
 }
@@ -452,60 +477,100 @@ export function Memory({ room, me }) {
   );
 }
 
-function hangFigure(wrong) {
-  const head = wrong >= 1 ? "O" : " ";
-  const body = wrong >= 2 ? "|" : " ";
-  const larm = wrong >= 3 ? "/" : " ";
-  const rarm = wrong >= 4 ? "\\" : " ";
-  const lleg = wrong >= 5 ? "/" : " ";
-  const rleg = wrong >= 6 ? "\\" : " ";
-  return [
-    "  +---+",
-    "  |   |",
-    `  ${head}   |`,
-    ` ${larm}${body}${rarm}  |`,
-    ` ${lleg} ${rleg}  |`,
-    "      |",
-    " =========",
-  ].join("\n");
+const KB = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
+
+function Gallows({ wrong, mini }) {
+  // each wrong guess draws one more part; pathLength=1 lets the stroke animate in
+  const parts = [
+    <circle key="h" className="part head" cx="120" cy="58" r="17" pathLength="1" />,
+    <path key="b" className="part" d="M120 75 V122" pathLength="1" />,
+    <path key="la" className="part" d="M120 88 L96 108" pathLength="1" />,
+    <path key="ra" className="part" d="M120 88 L144 108" pathLength="1" />,
+    <path key="ll" className="part" d="M120 122 L100 152" pathLength="1" />,
+    <path key="rl" className="part" d="M120 122 L140 152" pathLength="1" />,
+  ];
+  return (
+    <svg className={`gallows ${mini ? "mini" : ""}`} viewBox="0 0 190 165" aria-hidden>
+      <path className="frame" d="M20 160 H100 M60 160 V12 H120 V41 M60 40 L84 12" />
+      <g className={wrong >= 6 ? "dead" : ""}>{parts.slice(0, wrong)}</g>
+      {wrong >= 6 && (
+        <g stroke="#ff3b3b" strokeWidth="2.5" strokeLinecap="round">
+          <path d="M113 52 l6 6 M119 52 l-6 6 M123 52 l6 6 M129 52 l-6 6" />
+        </g>
+      )}
+    </svg>
+  );
 }
 
 export function Hangman({ room, me }) {
   const s = getSocket();
   const st = room.state;
-  const isGuesser = st.guesser === me;
+  const opp = room.players.find((p) => p.id !== me);
   const myTurn = st.turn === me && !st.winner;
   const nameOf = (id) => room.players.find((p) => p.id === id)?.name;
-  const alphabet = "abcdefghijklmnopqrstuvwxyz".split("");
+  const wrongOf = (id) => (st.wrong && st.wrong[id]) || 0;
+  const guess = (ch) => { if (myTurn && !st.guessed.includes(ch)) s.emit("hang:guess", ch); };
 
+  // physical keyboard support
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.target.tagName === "INPUT") return;
+      if (/^[a-z]$/i.test(e.key)) guess(e.key.toLowerCase());
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  const won = st.winner === me;
   const status = st.winner
-    ? (st.winner === me ? "You win!" : `${nameOf(st.winner)} wins.`)
-    : isGuesser ? (myTurn ? "Guess a letter" : "…")
-    : `${nameOf(st.guesser)} is guessing`;
+    ? (won ? "You win!" : `${nameOf(st.winner)} wins.`)
+    : myTurn ? "Your turn — pick a letter" : `${nameOf(st.turn)} is thinking…`;
+  const cls = st.winner ? (won ? "good" : "bad") : myTurn ? "turn" : "";
+  const word = st.reveal || null;
+  const slots = (word || st.masked || "").split("");
+
+  const panel = (p, big) => (
+    <div className={`hm-pl ${st.turn === p.id && !st.winner ? "active" : ""} ${wrongOf(p.id) >= st.maxWrong ? "out" : ""}`}>
+      <span className="nm">{p.id === me ? "You" : p.name}</span>
+      <Gallows wrong={wrongOf(p.id)} mini={!big} />
+      <span className="hm-lives" aria-label={`${st.maxWrong - wrongOf(p.id)} lives left`}>
+        {Array.from({ length: st.maxWrong }, (_, i) => (i < st.maxWrong - wrongOf(p.id) ? "❤️" : "🖤")).join("")}
+      </span>
+    </div>
+  );
 
   return (
-    <>
-      <p className="status">{status}</p>
-      <pre className="hang-figure" aria-hidden>{hangFigure(st.wrong || 0)}</pre>
-      <p className="hang-word">{st.masked?.split("").join(" ") || ""}</p>
-      {st.winner && st.reveal && <p className="meta">The word was <b>{st.reveal}</b></p>}
-      <p className="meta">Wrong: {st.wrong}/{st.maxWrong}</p>
-      <div className="hang-keys">
-        {alphabet.map((ch) => {
-          const used = st.guessed?.includes(ch);
-          return (
-            <button
-              key={ch}
-              className={`hang-key ${used ? "used" : ""}`}
-              disabled={!myTurn || used || !!st.winner}
-              onClick={() => s.emit("hang:guess", ch)}
-            >
-              {ch}
-            </button>
-          );
-        })}
+    <div className="hm">
+      <p className={`status ${cls}`}>{status}</p>
+      <div className="hm-top">
+        {panel(room.players.find((p) => p.id === me) || room.players[0], true)}
+        {opp && panel(opp, true)}
+      </div>
+      <span className="hm-cat">Category · {st.category}</span>
+      <div className="hm-word" aria-label="Word to guess">
+        {slots.map((ch, i) => (
+          <div key={i} className={`hm-slot ${ch !== "_" ? "on" : ""} ${word && st.masked[i] === "_" ? "miss" : ""}`}>
+            <span>{ch !== "_" ? ch : ""}</span>
+          </div>
+        ))}
+      </div>
+      <p className="meta">Take turns on one shared word. A wrong letter costs <b>you</b> a life and passes the turn; a right one lets you keep going.</p>
+      <div className="hm-kb">
+        {KB.map((row) => (
+          <div className="hm-row" key={row}>
+            {row.split("").map((ch) => {
+              const used = st.guessed.includes(ch);
+              const hit = used && (st.reveal || st.masked).includes(ch);
+              return (
+                <button key={ch} className={`hm-key ${used ? (hit ? "good" : "bad") : ""}`} disabled={!myTurn || used} onClick={() => guess(ch)}>
+                  {ch}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </div>
       {st.winner && <button className="primary" onClick={() => s.emit("rematch")}>Play again</button>}
-    </>
+    </div>
   );
 }

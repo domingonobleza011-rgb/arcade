@@ -1,20 +1,31 @@
 const { createServer } = require("http");
 const next = require("next");
 const { Server } = require("socket.io");
+const createExtra = require("./games-extra");
 
 const dev = process.env.NODE_ENV !== "production";
 const port = process.env.PORT || 3000;
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
-const MAX = { tictactoe: 2, quiz: 2, draw: 8, shooter: 8, pictionary: 8, chat: 30, connect4: 2, checkers: 2, rps: 2, memory: 2, hangman: 2 };
+const MAX = { tictactoe: 2, quiz: 2, draw: 8, shooter: 8, pictionary: 8, chat: 30, connect4: 2, checkers: 2, rps: 2, memory: 2, hangman: 2, battleship: 2, dots: 2, reversi: 2, gomoku: 2, snake: 2, pong: 2, tanks: 2, scramble: 2, mathrace: 2, quickdraw: 2 };
 const MIN = { pictionary: 2 };
 const EMOTES = ["👍", "😂", "😮", "🔥", "😢", "👏", "😎", "🤯"];
 const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 const RPS = ["rock", "paper", "scissors"];
 const RPS_BEATS = { rock: "scissors", paper: "rock", scissors: "paper" };
 const MEMORY_ICONS = ["🍎","🍋","🍇","🍒","🍑","🥝","🍉","🍓"];
-const HANG_WORDS = ["planet","guitar","castle","dragon","window","bridge","pirate","rocket","jungle","mirror","puzzle","summer","winter","forest","ocean","thunder","diamond","phoenix","whisper","galaxy"];
+const HANG_WORDS = [
+  ["planet","Space"],["galaxy","Space"],["rocket","Space"],["asteroid","Space"],["eclipse","Space"],["meteor","Space"],
+  ["castle","Places"],["bridge","Places"],["jungle","Places"],["lighthouse","Places"],["volcano","Places"],["island","Places"],
+  ["dragon","Fantasy"],["phoenix","Fantasy"],["wizard","Fantasy"],["unicorn","Fantasy"],["mermaid","Fantasy"],["goblin","Fantasy"],
+  ["guitar","Music"],["piano","Music"],["trumpet","Music"],["melody","Music"],["rhythm","Music"],["orchestra","Music"],
+  ["pizza","Food"],["pancake","Food"],["sandwich","Food"],["chocolate","Food"],["noodles","Food"],["avocado","Food"],
+  ["elephant","Animals"],["dolphin","Animals"],["penguin","Animals"],["giraffe","Animals"],["octopus","Animals"],["panther","Animals"],
+  ["thunder","Nature"],["rainbow","Nature"],["blizzard","Nature"],["whisper","Nature"],["canyon","Nature"],["glacier","Nature"],
+  ["keyboard","Tech"],["network","Tech"],["battery","Tech"],["browser","Tech"],["robot","Tech"],["satellite","Tech"],
+  ["pirate","Adventure"],["treasure","Adventure"],["compass","Adventure"],["expedition","Adventure"],["mirror","Objects"],["lantern","Objects"],
+];
 const BANK = [
   { text: "Which planet is known as the Red Planet?", options: ["Venus", "Mars", "Jupiter", "Mercury"], answer: 1 },
   { text: "What is the capital of Japan?", options: ["Kyoto", "Osaka", "Tokyo", "Nagoya"], answer: 2 },
@@ -40,7 +51,7 @@ const BANK = [
 
 const shuffle = (a) => [...a].sort(() => Math.random() - 0.5);
 const rooms = new Map();
-const queues = { tictactoe: [], quiz: [], draw: [], shooter: [], pictionary: [], chat: [], connect4: [], checkers: [], rps: [], memory: [], hangman: [] };
+const queues = Object.fromEntries(Object.keys(MAX).map((g) => [g, []]));
 const newCode = () => {
   let c;
   do c = Array.from({ length: 4 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ"[Math.floor(Math.random() * 24)]).join("");
@@ -146,9 +157,10 @@ app.prepare().then(() => {
     return n;
   }
 
-  function publicState(r) {
+  function publicState(r, viewer) {
     const s = r.state;
     if (!s) return null;
+    if (EX.games[r.game]) return EX.view(r, viewer);
     if (r.game === "tictactoe") return { board: s.board, turn: s.turn, winner: s.winner, marks: s.marks };
     if (r.game === "connect4") return { board: s.board, turn: s.turn, winner: s.winner, colors: s.colors };
     if (r.game === "checkers") return {
@@ -181,13 +193,8 @@ app.prepare().then(() => {
       return {
         wordLen: s.word.length,
         masked: s.word.split("").map((ch) => s.guessed.includes(ch) ? ch : "_").join(""),
-        guessed: s.guessed,
-        wrong: s.wrong,
-        maxWrong: s.maxWrong,
-        turn: s.turn,
-        guesser: s.guesser,
-        winner: s.winner,
-        reveal: s.winner ? s.word : null,
+        guessed: s.guessed, wrong: s.wrong, maxWrong: s.maxWrong, turn: s.turn, category: s.cat,
+        lastBy: s.lastBy, winner: s.winner, reveal: s.winner ? s.word : null,
       };
     }
     return null;
@@ -197,8 +204,10 @@ app.prepare().then(() => {
   });
   const push = (r) => {
     if (r.game === "pictionary") return r.players.forEach((p) => io.to(p.id).emit("room", view(r, picState(r, p.id))));
+    if (EX.perViewer.has(r.game)) return r.players.forEach((p) => io.to(p.id).emit("room", view(r, publicState(r, p.id))));
     io.to(r.code).emit("room", view(r, publicState(r)));
   };
+  const EX = createExtra({ io, sys, push: (r) => push(r) });
 
   function nextQ(r) {
     const s = r.state;
@@ -221,6 +230,7 @@ app.prepare().then(() => {
   function start(r) {
     if (r.state && r.state.timer) clearTimeout(r.state.timer);
     r.status = "playing";
+    if (EX.games[r.game]) { EX.games[r.game].start(r); return push(r); }
     if (r.game === "tictactoe") {
       const [a, b] = r.players;
       r.state = { board: Array(9).fill(null), turn: "X", winner: null, marks: { [a.id]: "X", [b.id]: "O" } };
@@ -268,11 +278,10 @@ app.prepare().then(() => {
     }
     if (r.game === "hangman") {
       const [a, b] = r.players;
+      const [word, cat] = HANG_WORDS[Math.floor(Math.random() * HANG_WORDS.length)];
       r.state = {
-        word: HANG_WORDS[Math.floor(Math.random() * HANG_WORDS.length)],
-        guessed: [], wrong: 0, maxWrong: 6,
-        guesser: a.id, turn: a.id,
-        winner: null,
+        word, cat, guessed: [], wrong: { [a.id]: 0, [b.id]: 0 }, maxWrong: 6,
+        turn: a.id, lastBy: null, winner: null,
       };
     }
     push(r);
@@ -520,6 +529,8 @@ app.prepare().then(() => {
       target.emit("media:signal", { from: socket.id, signal });
     });
 
+    EX.register(socket, mine);
+
     socket.on("leave", () => leave(socket));
     socket.on("disconnect", () => leave(socket));
 
@@ -710,7 +721,7 @@ app.prepare().then(() => {
       }, 900);
     });
 
-    // hangman
+    // hangman: shared word, separate gallows. Wrong guess passes the turn, a right one keeps it.
     socket.on("hang:guess", (letter) => {
       const r = mine(socket);
       if (!r || r.game !== "hangman" || !r.state) return;
@@ -718,18 +729,15 @@ app.prepare().then(() => {
       if (s.winner || s.turn !== socket.id) return;
       const ch = String(letter || "").toLowerCase().slice(0, 1);
       if (!/^[a-z]$/.test(ch) || s.guessed.includes(ch)) return;
+      const opp = r.players.find((p) => p.id !== socket.id);
       s.guessed.push(ch);
+      s.lastBy = socket.id;
       if (!s.word.includes(ch)) {
-        s.wrong++;
-        if (s.wrong >= s.maxWrong) {
-          s.winner = r.players.find((p) => p.id !== s.guesser).id; // word setter / opponent wins
-        } else {
-          // stay on guesser
-        }
-      } else {
-        if (s.word.split("").every((c) => s.guessed.includes(c))) {
-          s.winner = s.guesser;
-        }
+        s.wrong[socket.id]++;
+        if (s.wrong[socket.id] >= s.maxWrong && opp) s.winner = opp.id;
+        else if (opp) s.turn = opp.id;
+      } else if (s.word.split("").every((c) => s.guessed.includes(c))) {
+        s.winner = socket.id;
       }
       push(r);
     });
@@ -741,7 +749,7 @@ app.prepare().then(() => {
         return;
       }
       if (!r || r.players.length !== 2 || !r.state) return;
-      const done =
+      const done = EX.games[r.game] ? EX.games[r.game].done(r) :
         r.game === "tictactoe" || r.game === "connect4" || r.game === "checkers" || r.game === "memory" || r.game === "hangman" ? r.state.winner
         : r.game === "quiz" ? r.state.phase === "done"
         : r.game === "rps" ? r.state.winner || r.state.phase === "done"

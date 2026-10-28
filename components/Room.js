@@ -2,22 +2,11 @@
 import { useEffect, useRef, useState } from "react";
 import { getSocket } from "../lib/socket";
 import { TicTacToe, Quiz, Draw, Shooter, Pictionary, Connect4, Checkers, RPS, Memory, Hangman } from "./games";
+import { Battleship, DotsBoxes, Reversi, Gomoku, Snake, Pong, Tanks, Scramble, MathRace, QuickDraw } from "./games2";
+import { TITLES, META } from "./registry";
 import MediaControls from "./MediaControls";
 
 const EMOTES = ["👍", "😂", "😮", "🔥", "😢", "👏", "😎", "🤯"];
-const TITLES = {
-  tictactoe: "Tic-tac-toe",
-  quiz: "Quiz battle",
-  draw: "Drawing board",
-  shooter: "Arena shooter",
-  pictionary: "Draw & guess",
-  chat: "Chat room",
-  connect4: "Connect Four",
-  checkers: "Checkers",
-  rps: "Rock Paper Scissors",
-  memory: "Memory Match",
-  hangman: "Hangman",
-};
 
 export default function Room({ room, me, onLeave }) {
   const s = getSocket();
@@ -53,16 +42,10 @@ export default function Room({ room, me, onLeave }) {
   };
 
   const Game = {
-    tictactoe: TicTacToe,
-    quiz: Quiz,
-    draw: Draw,
-    shooter: Shooter,
-    pictionary: Pictionary,
-    connect4: Connect4,
-    checkers: Checkers,
-    rps: RPS,
-    memory: Memory,
-    hangman: Hangman,
+    tictactoe: TicTacToe, quiz: Quiz, draw: Draw, shooter: Shooter, pictionary: Pictionary, connect4: Connect4,
+    checkers: Checkers, rps: RPS, memory: Memory, hangman: Hangman,
+    battleship: Battleship, dots: DotsBoxes, reversi: Reversi, gomoku: Gomoku, snake: Snake, pong: Pong,
+    tanks: Tanks, scramble: Scramble, mathrace: MathRace, quickdraw: QuickDraw,
   }[room.game];
   const isChat = room.game === "chat";
 
@@ -70,7 +53,7 @@ export default function Room({ room, me, onLeave }) {
     <>
       <div className="bar">
         <div>
-          <h1 style={{ fontSize: "1.6rem" }}>{TITLES[room.game]}</h1>
+          <h1 style={{ fontSize: "1.6rem" }}><span aria-hidden>{META[room.game]?.icon}</span>{TITLES[room.game]}</h1>
           <div className="players">
             {room.players.map((p) => (
               <span key={p.id} className={`pill ${p.id === me ? "me" : ""}`}>{p.name}{p.id === me ? " (you)" : ""}</span>
@@ -91,7 +74,11 @@ export default function Room({ room, me, onLeave }) {
       <div className="room" style={isChat ? { gridTemplateColumns: "1fr" } : undefined}>
         {!isChat && <section className="panel stage">
           {room.status === "waiting" ? (
-            <p className="status">Waiting for players ({room.players.length}/{room.min}). Share code <span className="code">{room.code}</span></p>
+            <div className="waiting">
+              <span className="big" aria-hidden>{META[room.game]?.icon}</span>
+              <p className="status">Waiting for players ({room.players.length}/{room.min})</p>
+              <p className="meta">Share code <span className="code">{room.code}</span> with a friend</p>
+            </div>
           ) : (
             <Game room={room} me={me} />
           )}

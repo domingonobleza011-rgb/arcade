@@ -3,7 +3,7 @@
 Realtime multiplayer games with room codes, random matchmaking, live chat and emotes.
 Next.js + a custom Socket.IO server.
 
-**Games:** Tic-tac-toe · Connect Four · Checkers · Rock Paper Scissors · Memory Match · Hangman · Quiz battle · Drawing board · Draw & guess (2–8 players) · Arena shooter · Chat rooms
+**Games (21):** Tic-tac-toe · Connect Four · Checkers · Reversi · Gomoku · Battleship · Dots & Boxes · Snake Duel · Neon Pong · Tank Battle · Arena shooter · Quick Draw · Rock Paper Scissors · Memory Match · Hangman · Quiz battle · Word Scramble · Math Race · Drawing board · Draw & guess (2–8 players) · Chat rooms
 
 ```bash
 npm install
@@ -17,5 +17,5 @@ Vercel serverless can't hold WebSocket connections. Use any Node host:
 It reads the PORT env var. Room state is in memory, so run a single instance.
 
 ## Add a game
-1. Add its id to `MAX` in `server.js` and handle its events there.
-2. Add a component in `components/games.js` and register it in `components/Room.js` and the lobby list.
+1. Server: add its id to `MAX` in `server.js`. For turn-based or realtime games, add a `{ start, view, done, snap? }` entry in `games-extra.js` and its socket events in `register()`.
+2. Client: add a component (`components/games.js` or `components/games2.js`), register it in `components/Room.js`, and add a card to `components/registry.js` (this drives the lobby and room titles).
